@@ -105,7 +105,7 @@ python -m validation_recall_precision \
 - `--prob_thresh`: Probability cutoff for water molecule sampling (higher values increase precision but reduce coverage)
 - `--save_pos`: Saves sampled water molecule positions as `.pdb` files
 
-If you encounter out-of-memory issues, consider modifying `confidence/dataset.py` by reducing the value of `water_ratio = 15` at line 231 to a smaller value. Note that this may reduce prediction accuracy.
+If you encounter out-of-memory issues, consider modifying `confidence/dataset.py` by reducing the value of `water_ratio = 15` at line 203 to a smaller value. Note that this may reduce prediction accuracy.
 
 **Output**:
 Predicted water molecule positions will be saved as `.pdb` files in:

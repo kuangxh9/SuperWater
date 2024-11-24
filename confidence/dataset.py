@@ -39,15 +39,13 @@ class ListDataset(Dataset):
 
 def get_cache_path(args, split):
     cache_path = args.cache_path
-    # if not args.no_torsion:
     cache_path += '_torsion'
     if args.all_atoms:
         cache_path += '_allatoms'
     split_path = args.split_train if split == 'train' else args.split_val
     cache_path = os.path.join(cache_path, f'limit{args.limit_complexes}_INDEX{os.path.splitext(os.path.basename(split_path))[0]}_maxLigSize{args.max_lig_size}_H{int(not args.remove_hs)}_recRad{args.receptor_radius}_recMax{args.c_alpha_max_neighbors}'
                                        + ('' if not args.all_atoms else f'_atomRad{args.atom_radius}_atomMax{args.atom_max_neighbors}')
-                                    #    + ('' if args.no_torsion or args.num_conformers == 1 else
-                                    #        f'_confs{args.num_conformers}')
+    
                               + ('' if args.esm_embeddings_path is None else f'_esmEmbeddings'))
     return cache_path
 
@@ -70,9 +68,7 @@ class ConfidenceDataset(Dataset):
                  cache_ids_to_combine=None, cache_creation_id=None, running_mode=None, add_perturbation=False):
 
         super(ConfidenceDataset, self).__init__()
-        ##
         self.loader = loader
-        ##
         self.device = device
         self.inference_steps = inference_steps
         self.limit_complexes = limit_complexes
@@ -126,12 +122,9 @@ class ConfidenceDataset(Dataset):
         for positions_tuple in list(zip(*all_full_ligand_positions)):
             self.full_ligand_positions.append(np.concatenate(positions_tuple, axis=0))
         for positions_tuple in list(zip(*all_rmsds)):
-#             self.rmsds.append(np.stack(positions_tuple, axis=0))
             self.rmsds.append(np.concatenate(positions_tuple, axis=0))
         generated_rmsd_complex_names = names_order
         
-        
-#         print("self.rmsds: ", len(self.rmsds))
         print('Number of complex graphs: ', len(self.loader.dataset))
             
         print('Number of RMSDs and positions for the complex graphs: ', len(self.full_ligand_positions))
@@ -139,7 +132,6 @@ class ConfidenceDataset(Dataset):
         self.all_samples_per_complex = samples_per_complex * (1 if self.cache_ids_to_combine is None else len(self.cache_ids_to_combine))
 
         self.positions_rmsds_dict = {name: (pos, rmsd) for name, pos, rmsd in zip (generated_rmsd_complex_names, self.full_ligand_positions, self.rmsds)}
-        # self.dataset_names = list(set(self.positions_rmsds_dict.keys()))
         self.dataset_names = list(self.positions_rmsds_dict.keys())
         if limit_complexes > 0:
             self.dataset_names = self.dataset_names[:limit_complexes]
@@ -148,20 +140,12 @@ class ConfidenceDataset(Dataset):
         return len(self.dataset_names)
 
     def get(self, idx):
-        # complex_graph = copy.deepcopy(self.complex_graph_dict[self.dataset_names[idx]])
         complex_name = self.dataset_names[idx]
         complex_graph = torch.load(os.path.join(self.loader.dataset.full_cache_path, f"{complex_name}.pt"))
         positions, rmsds = self.positions_rmsds_dict[self.dataset_names[idx]]
         
-        # ## recacluateing rmsds to consider original pdb file
-        # real_zinc_pos = find_real_zinc_pos(os.path.join(self.args.data_dir, f"{self.dataset_names[idx]}.pdb"))
-        # positions_new = positions.squeeze(0) + complex_graph.original_center.numpy()
-        # rmsds, indices = get_nearest_point_distances(positions_new, real_zinc_pos)
-        # ##
         assert(complex_graph.name == self.dataset_names[idx])
-        ## modify x
         complex_graph['ligand'].x =  complex_graph['ligand'].x[-1].repeat(positions.shape[-2], 1)
-        ##
         if self.balance:
             if isinstance(self.rmsd_classification_cutoff, list): raise ValueError("a list for --rmsd_classification_cutoff can only be used without --balance")
             label = random.randint(0, 1)
@@ -181,25 +165,14 @@ class ConfidenceDataset(Dataset):
             complex_graph.y = torch.tensor(label).float()
         else:
             sample = random.randint(0, self.all_samples_per_complex - 1)
-#             print("get: len(rmsds): ", len(rmsds))
-#             print("get: len(rmsds): ", len(rmsds[sample]))
-#             print("get: len(positions): ", len(positions))
-#             print("get: len(positions): ", len(positions[sample]))
             
             complex_graph['ligand'].pos = torch.from_numpy(positions[sample])
-            # complex_graph.y = torch.tensor(rmsds < self.rmsd_classification_cutoff).float().unsqueeze(0)
             complex_graph.y = torch.tensor(rmsds < self.rmsd_classification_cutoff).float()
-            
-            #testcode
-#             complex_graph.y = torch.tensor(rmsds[sample] < self.rmsd_classification_cutoff).float().unsqueeze(0)
                 
             if isinstance(self.rmsd_classification_cutoff, list):
                 complex_graph.y_binned = torch.tensor(np.logical_and(rmsds[sample] < self.rmsd_classification_cutoff + [math.inf],rmsds[sample] >= [0] + self.rmsd_classification_cutoff), dtype=torch.float).unsqueeze(0)
                 complex_graph.y = torch.tensor(rmsds[sample] < self.rmsd_classification_cutoff[0]).unsqueeze(0).float()
             
-#             print('rmsds', torch.tensor(rmsds).float().shape)
-#             print('complex_graph.y', complex_graph.y.shape)
-#             sss
             complex_graph.rmsd = torch.tensor(rmsds).float()
 
         complex_graph['ligand'].node_t = {'tr': 0 * torch.ones(complex_graph['ligand'].num_nodes)}
@@ -222,7 +195,6 @@ class ConfidenceDataset(Dataset):
         
         print('Running mode: ', self.running_mode)
         print("Add perturbation: ", self.add_perturbation)
-#         print(running_modes)
 
         if self.running_mode == "train":
             water_ratio = 15
@@ -237,71 +209,18 @@ class ConfidenceDataset(Dataset):
         print('water_number/residue_number ratio: ', water_ratio)
         print('resampling steps: ', resample_steps)
         print('total resampling ratio: ', total_resample_ratio)
-
-        # print('HAPPENING | loading cached complexes of the original model to create the confidence dataset RMSDs and predicted positions. Doing that from: ', os.path.join(self.complex_graphs_cache, "heterographs.pkl"))
-        # with open(os.path.join(original_model_cache, "heterographs.pkl"), 'rb') as f:
-        #     complex_graphs = pickle.load(f)
-        # dataset = ListDataset(complex_graphs)
-        # loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False)
         
         rmsds, full_ligand_positions, names = [], [], []
         for idx, orig_complex_graph in tqdm(enumerate(self.loader)):
             data_list = [copy.deepcopy(orig_complex_graph) for _ in range(self.samples_per_complex)]
-            # ## set num_metal to be similar to residue number
-            # res_num = int(orig_complex_graph[0]['receptor'].pos.shape[0])
-            # num_metal = res_num if res_num < 50 else 50
-            # ##
             res_num = int(orig_complex_graph[0]['receptor'].pos.shape[0])
             step_num_water = int(res_num * water_ratio)
             total_num_water = int(res_num * total_resample_ratio)
             total_sampled_water = 0
-
-            
-#             original code
-# 
-#             randomize_position_multiple(data_list, False, self.original_model_args.tr_sigma_max, water_num=num_water)
-#             predictions_list, confidences = sampling_test1(data_list=data_list, model=model,
-#                                                 inference_steps=self.inference_steps,
-#                                                 tr_schedule=tr_schedule,
-#                                                 device=self.device, t_to_sigma=t_to_sigma, model_args=self.original_model_args)
-#             original code
-
-#             orig_complex_graph['ligand'].orig_pos = (orig_complex_graph['ligand'].pos.cpu().numpy() + orig_complex_graph.original_center.cpu().numpy())
-#             orig_ligand_pos = np.expand_dims(orig_complex_graph['ligand'].orig_pos - orig_complex_graph.original_center.cpu().numpy(), axis=0)
-
-
-#             if isinstance(orig_complex_graph['ligand'].orig_pos, list):
-#                 orig_complex_graph['ligand'].orig_pos = orig_complex_graph['ligand'].orig_pos[0]  
-#             real_water_pos = find_real_water_pos(os.path.join(self.args.data_dir, f"{orig_complex_graph.name[0]}/{orig_complex_graph.name[0]}_water.pdb"))
-#             real_water_pos_centered = real_water_pos - orig_complex_graph.original_center.cpu().numpy()
-            
-            
+        
             prediction_list = []
             confidence_list = []
             
-#             print('total_num_water: ', total_num_water)
-            
-#             while total_sampled_water < total_num_water:
-#                 sample_data_list = copy.deepcopy(data_list)
-#                 randomize_position_multiple(sample_data_list, False, self.original_model_args.tr_sigma_max, water_num=step_num_water)
-#                 predictions, confidences = sampling_test1(data_list=sample_data_list, model=model,
-#                                                     inference_steps=self.inference_steps,
-#                                                     tr_schedule=tr_schedule,
-#                                                     device=self.device, t_to_sigma=t_to_sigma, model_args=self.original_model_args) 
-#                 if total_sampled_water < 0.4 * total_num_water:
-#                     predicted_water_pos = predictions[0]['ligand'].pos.cpu().numpy()
-#                     tp_coords = torch.tensor(find_tp_coords(real_water_pos_centered, predicted_water_pos), dtype=torch.float32)
-#                     predictions[0]['ligand'].pos = tp_coords
-#                     total_sampled_water += tp_coords.shape[0]
-# #                     print("predictions[0]['ligand'].pos: ", predictions[0]['ligand'].pos.shape)
-# #                     print("predictions[0]['ligand'].pos: ", predictions[0]['ligand'].pos[0])
-# #                     print('total_sampled_water: ', total_sampled_water)
-#                 else:
-#                     total_sampled_water += predictions[0]['ligand'].pos.shape[0]
-#                 prediction_list.append(predictions)
-#                 confidence_list.append(confidences)
-            
-
             for i in range(resample_steps):
                 sample_data_list = copy.deepcopy(data_list)
                 randomize_position_multiple(sample_data_list, False, self.original_model_args.tr_sigma_max, water_num=step_num_water)
@@ -330,32 +249,13 @@ class ConfidenceDataset(Dataset):
             all_ligand_pos = np.concatenate(ligand_pos_list, axis=0)
             ligand_pos = np.asarray([all_ligand_pos], dtype=np.float32)
             
-            ## recacluateing rmsds to consider original pdb file
             
             positions_new = ligand_pos.squeeze(0) + orig_complex_graph.original_center.cpu().numpy()
             rmsd, indices = get_nearest_point_distances(positions_new, real_water_pos)
-            ##
-            # rmsd, min_indices = get_nearest_point_distances(ligand_pos, orig_ligand_pos)
-            
-            
-#             print()
-            
-#             print('real_water_pos: ', real_water_pos.shape)
-#             print('rmsd.shape: ', rmsd.shape)
-#             print("sum(rmsd<1): ",sum(rmsd < 1))
-#             print(rmssd)
             
             rmsds.append(rmsd)
-#             full_ligand_positions.append(np.asarray([complex_graph['ligand'].pos.cpu().numpy() for complex_graph in predictions_list]))
             full_ligand_positions.append(ligand_pos)
     
-            
-#             full_ligand_positions_origin = []
-#             full_ligand_positions_origin.append(np.asarray([complex_graph['ligand'].pos.cpu().numpy() for complex_graph in predictions_list]))
-#             print('full_ligand_positions_origin: ', full_ligand_positions_origin)
-#             print('full_ligand_positions: ', full_ligand_positions)
-            
-#             print(ligand_poss)
             names.append(orig_complex_graph.name[0])
             assert(len(orig_complex_graph.name) == 1) # I just put this assert here because of the above line where I assumed that the list is always only lenght 1. Just in case it isn't maybe check what the names in there are.
         with open(os.path.join(self.full_cache_path, f"ligand_positions{'' if self.cache_creation_id is None else '_id' + str(self.cache_creation_id)}.pkl"), 'wb') as f:
