@@ -2,7 +2,8 @@
 
 SuperWater is a generative model designed to predict water molecule distributions on protein surfaces using score-based diffusion models and equivariant neural networks. The model and methodology are described in our [preprint on bioRxiv](https://www.biorxiv.org/content/10.1101/2024.11.18.624208v1).
 
----
+For any questions, feel free to open an issue or contact us at: xiaohan.kuang@vanderbilt.edu, zhaoqian.su@vanderbilt.edu
+
 ## Overview
 
 ### Diffusion Process
@@ -11,7 +12,6 @@ SuperWater is a generative model designed to predict water molecule distribution
 ### Model Architecture
 <img src="./images/model_arch/superwater_model_arch.png" height="300"/>
 
----
 ## System Requirements
 
 - **GPU**: Minimum 40GB memory (e.g., NVIDIA A100)
@@ -19,7 +19,6 @@ SuperWater is a generative model designed to predict water molecule distribution
   - Memory optimization for large proteins will be addressed in future updates
 - **Training Hardware**: 4x NVIDIA A100 80GB GPUs (if retraining)
 
----
 ## Installation
 
 1. Install required Python packages:
@@ -32,7 +31,6 @@ SuperWater is a generative model designed to predict water molecule distribution
     
    Clone the [ESM GitHub repository](https://github.com/facebookresearch/esm) and save it under `esm/` in your project directory.
 
----
 ## Dataset Preparation
 1. Create your test dataset structure:
     ```
@@ -52,7 +50,7 @@ SuperWater is a generative model designed to predict water molecule distribution
     ```
     Refer to `test_res15.txt` for an example.
 
----
+
 ## Running Inference
 
 ### Step 1: Generate ESM Embeddings
@@ -113,14 +111,12 @@ Predicted water molecule positions will be saved as `.pdb` files in:
 inference_out/inferenced_pos_cap<prob_thresh>/
 ```
 
----
 ## Inference Animation
 
 The animation below illustrates how randomly distributed water molecules in 3D space align to their predicted positions on the protein surface during the reverse diffusion process.
 
 ![Inference Animation](./images/inference_out/4YL4.gif)
 
----
 ## Coming Soon (After my final exams)
 - Detailed retraining instructions
 - Memory optimization for large proteins
