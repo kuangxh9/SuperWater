@@ -8,3 +8,5 @@ torch_scatter
 e3nn
 spyrmsd
 openbabel-wheel
+tqdm
+
