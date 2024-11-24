@@ -77,37 +77,10 @@ def get_structure_from_file(file_path):
 data_dir = args.data_dir
 names = os.listdir(data_dir)
 
-# if args.dataset == 'waterbind':
-#     sequences = []
-#     ids = []
-
-#     for name in tqdm(names):
-#         # if name.endswith(".pdb"):  # check for .pdb files
-#             # rec_path = os.path.join(data_dir, name)
-#         if name == '.DS_Store': continue
-#         if os.path.exists(os.path.join(data_dir, name, f'{name}_protein_processed.pdb')):
-#             rec_path = os.path.join(data_dir, name, f'{name}_protein_processed.pdb')
-#         else:
-#             rec_path = os.path.join(data_dir, name, f'{name}_protein.pdb')
-#         l = get_structure_from_file(rec_path)
-#         for i, seq in enumerate(l):
-#             sequences.append(seq)
-#             ids.append(f'{name[:4]}_chain_{i}')
-#     records = []
-#     for (index, seq) in zip(ids, sequences):
-#         record = SeqRecord(Seq(seq), str(index))
-#         record.description = ''
-#         records.append(record)
-#     SeqIO.write(records, args.out_file, "fasta")
-
-    
-    
 sequences = []
 ids = []
 
 for name in tqdm(names):
-    # if name.endswith(".pdb"):  # check for .pdb files
-        # rec_path = os.path.join(data_dir, name)
     if name == '.DS_Store': continue
     if os.path.exists(os.path.join(data_dir, name, f'{name}_protein_processed.pdb')):
         rec_path = os.path.join(data_dir, name, f'{name}_protein_processed.pdb')

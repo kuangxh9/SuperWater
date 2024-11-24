@@ -12,9 +12,6 @@ from utils.diffusion_utils import get_t_schedule
 from utils.min_dist import match_points_and_get_distances
 
 def loss_function(tr_pred, expand_tr_sigma, data, t_to_sigma, device, tr_weight=1, apply_mean=True):
-    # tr_sigma = t_to_sigma(
-    #     *[torch.cat([d.complex_t[noise_type] for d in data]) if device.type == 'cuda' else data.complex_t[noise_type]
-    #       for noise_type in ['tr']])
     mean_dims = (0, 1) if apply_mean else 1
 
     # translation component
@@ -24,12 +21,10 @@ def loss_function(tr_pred, expand_tr_sigma, data, t_to_sigma, device, tr_weight=
     
     tr_loss = ((tr_pred.cpu() - tr_score) ** 2 * (expand_tr_sigma ** 2 + 1e-6)).mean(dim=mean_dims)
     
-#     tr_loss = ((tr_pred.cpu() - tr_score) ** 2).mean(dim=mean_dims)
-    ## debug
     if torch.isnan(tr_loss).any():
         print("NaN found in loss")
         tr_loss = torch.nan_to_num(tr_loss, nan=0.0)
-    ##
+
     tr_base_loss = (tr_score ** 2 *  expand_tr_sigma ** 2).mean(dim=mean_dims).detach()
 
     loss = tr_loss * tr_weight
@@ -76,14 +71,9 @@ def train_epoch(model, loader, optimizer, device, t_to_sigma, loss_fn, ema_weigt
         if device.type == 'cuda' and len(data) == 1 or device.type == 'cpu' and data.num_graphs == 1:
             print("Skipping batch of size 1 since otherwise batchnorm would not work.")
         optimizer.zero_grad()
-#         for d in data:
-#             d['training_mode'] = True
         try:
             tr_pred, expand_tr_sigma, expand_batch_idx = model(data)
-
-            # loss, tr_loss, rot_loss, tor_loss, tr_base_loss, rot_base_loss, tor_base_loss = \
-            #     loss_fn(tr_pred, rot_pred, tor_pred, data=data, t_to_sigma=t_to_sigma, device=device)
-            
+     
             loss, tr_loss, tr_base_loss = \
                 loss_fn(tr_pred, expand_tr_sigma, data=data, t_to_sigma=t_to_sigma, device=device)
                 
@@ -128,9 +118,6 @@ def test_epoch(model, loader, device, t_to_sigma, loss_fn, test_sigma_intervals=
 
     for data in tqdm(loader, total=len(loader)):
         try:
-#             data_dict = {'data': data, 'traininig_mode': False}
-#             for d in data:
-#                 d['training_mode'] = False
             with torch.no_grad():
                 tr_pred, expand_tr_sigma, expand_batch_idx = model(data)
 
@@ -212,9 +199,7 @@ def inference_epoch(model, complex_graphs, device, t_to_sigma, args):
             [complex_graph['ligand'].pos.cpu().numpy()[filterHs] for complex_graph in predictions_list])
         orig_ligand_pos = np.expand_dims(
             orig_complex_graph['ligand'].orig_pos[filterHs] - orig_complex_graph.original_center.cpu().numpy(), axis=0)
-        # rmsd = np.sqrt(((ligand_pos - orig_ligand_pos) ** 2).sum(axis=2).mean(axis=1))
         rmsd = np.sqrt(((ligand_pos - orig_ligand_pos) ** 2).sum(axis=2))
-        # rmsds.append(rmsd)
         rmsds.extend(rmsd.flatten().tolist())
 
     rmsds = np.array(rmsds)

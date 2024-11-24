@@ -217,13 +217,11 @@ class InferenceDataset(Dataset):
         name, protein_file, ligand_description, lm_embedding = \
             self.complex_names[idx], self.protein_files[idx], self.ligand_descriptions[idx], self.lm_embeddings[idx]
 
-        # build the pytorch geometric heterogeneous graph
         complex_graph = HeteroData()
         complex_graph['name'] = name
 
-        # parse the ligand, either from file or smile
         try:
-            mol = MolFromSmiles(ligand_description)  # check if it is a smiles or a path
+            mol = MolFromSmiles(ligand_description) 
 
             if mol is not None:
                 mol = AddHs(mol)

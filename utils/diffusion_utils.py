@@ -15,9 +15,6 @@ def t_to_sigma(t_tr, args):
 
 
 def modify_conformer(data, tr_update):
-    # lig_center = torch.mean(data['ligand'].pos, dim=0, keepdim=True)
-    # rigid_new_pos = tr_update + lig_center
-    # rigid_new_pos = tr_update + data['ligand'].pos
     data['ligand'].pos = data['ligand'].pos + tr_update
     return data
 

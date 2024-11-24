@@ -142,12 +142,9 @@ if args.config:
     args.config = args.config.name
 assert (args.main_metric_goal == 'max' or args.main_metric_goal == 'min')
 
-# print('---------------', args.data_dir)
-
 save_pos_path = "inference_out/" + f"inferenced_pos_cap{args.prob_thresh}" + "/"    ### TODO: to be changed
 os.makedirs(save_pos_path, exist_ok=True)
 
-### testing
 torch.manual_seed(42)
 
 def convert_txt_to_pdb(txt_file_path: str, output_pdb_path: str):
@@ -184,15 +181,7 @@ def test_epoch(model, loader, rmsd_prediction, filter=True, use_sigmoid=args.use
             
             positions = torch.cat([graph['ligand'].pos for graph in data]).to(device)
             positions_adjusted = positions.cpu().numpy() + data[0].original_center.numpy()
-#             positions_adjusted = positions + data[0].original_center.numpy()
             num_sampled_positions = len(positions_adjusted)
-            
-#             if filter:
-#                 filtered_positions = positions[pred_labels == 1]
-#                 filtered_positions = filtered_positions.cpu().numpy()
-#                 filtered_probabilities = probabilities[pred_labels == 1].cpu().numpy()
-#             else:
-#                 filtered_positions = positions.cpu().numpy()
                 
             try:                
                 centroids =  find_centroids(positions_adjusted, 
@@ -243,16 +232,6 @@ def evalulation(args, model, val_loader, run_dir):
     test_epoch(model, val_loader, args.rmsd_prediction)
 
 def construct_loader_origin(args_confidence, args, t_to_sigma):    
-#     common_args = {'transform': None, 'root': args.data_dir, 'limit_complexes': args.limit_complexes,
-#                    'receptor_radius': args.receptor_radius,
-#                    'c_alpha_max_neighbors': args.c_alpha_max_neighbors,
-#                    'remove_hs': args.remove_hs, 'max_lig_size': args.max_lig_size,
-#                    'popsize': args.matching_popsize, 'maxiter': args.matching_maxiter,
-#                    'num_workers': args.num_workers, 'all_atoms': args.all_atoms,
-#                    'atom_radius': args.atom_radius, 'atom_max_neighbors': args.atom_max_neighbors,
-#                    'esm_embeddings_path': args.esm_embeddings_path}
-    
-
     confi_common_args = {'transform': None, 'root': args_confidence.data_dir, 'limit_complexes': args.limit_complexes,
                    'receptor_radius': args.receptor_radius,
                    'c_alpha_max_neighbors': args.c_alpha_max_neighbors,
@@ -267,21 +246,12 @@ def construct_loader_origin(args_confidence, args, t_to_sigma):
     test_dataset = PDBBind(cache_path=args.cache_path, split_path=args_confidence.split_test, keep_original=True,
                            **confi_common_args)
     
-#     test_dataset = PDBBind(cache_path=args.cache_path, split_path=args_confidence.split_test, keep_original=True,
-#                            **common_args)
-    
-#     print('-------- after test ------')
-
     loader_class = DataLoader
-#     train_loader = loader_class(dataset=train_dataset, batch_size=args_confidence.batch_size_preprocessing,
-#                                 num_workers=args_confidence.num_workers, shuffle=False, pin_memory=args.pin_memory)
     
     test_loader = loader_class(dataset=test_dataset, batch_size=args_confidence.batch_size_preprocessing,
                                num_workers=args_confidence.num_workers, shuffle=False, pin_memory=args.pin_memory)
-    # infer_loader = loader_class(dataset=test_dataset, batch_size=args_confidence.batch_size_preprocessing, num_workers=args_confidence.num_workers, shuffle=False, pin_memory=args.pin_memory)
     
     return test_loader
-#     return train_loader, test_loader
 
 
 def construct_loader_confidence(args, device):
@@ -296,10 +266,10 @@ def construct_loader_confidence(args, device):
                    "running_mode": args.running_mode}
     loader_class = DataListLoader if torch.cuda.is_available() else DataLoader
     exception_flag = False
+
     # construct original loader
     original_model_args = get_args(args.original_model_dir)
     t_to_sigma = partial(t_to_sigma_compl, args=original_model_args)
-#     train_loader, test_loader = construct_loader_origin(args, original_model_args, t_to_sigma)
     
     test_loader = construct_loader_origin(args, original_model_args, t_to_sigma)
 
@@ -310,7 +280,6 @@ def construct_loader_confidence(args, device):
     if exception_flag: raise Exception('We encountered the exception during train dataset loading: ', e)
         
     return test_loader
-#     return train_loader, test_loader
 
 
 def set_seed(seed: int = 42) -> None:
@@ -334,13 +303,10 @@ if __name__ == '__main__':
     with open(f'{args.confidence_dir}/model_parameters.yml') as f:
         confidence_args = Namespace(**yaml.full_load(f))
 
-    # construct loader
-#     train_loader, test_loader = construct_loader_confidence(args, device)
     
     test_loader = construct_loader_confidence(args, device)
 
     t_to_sigma = partial(t_to_sigma_compl, args=score_model_args)
-    # model = get_model(score_model_args if args.transfer_weights else args, device, t_to_sigma=None, confidence_mode=True)
     model = get_model(confidence_args, device, t_to_sigma=None, confidence_mode=True)
 
     # Load state_dict
@@ -348,7 +314,6 @@ if __name__ == '__main__':
     # Adjust for DataParallel wrapping
     new_state_dict = {'module.' + k: v for k, v in state_dict.items()}
     model.load_state_dict(new_state_dict, strict=True)
-    # model.load_state_dict(state_dict)
 
     numel = sum([p.numel() for p in model.parameters()])
     print('Loading trained confidence model with', numel, 'parameters')

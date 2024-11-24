@@ -16,7 +16,7 @@ args = parser.parse_args()
 cutoff = args.chain_cutoff
 data_dir = args.data_dir
 names = os.listdir(data_dir)
-#%%
+
 from Bio import SeqIO
 biopython_parser = PDBParser()
 

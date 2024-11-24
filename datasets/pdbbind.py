@@ -34,13 +34,8 @@ class NoiseTransform(BaseTransform):
         return self.apply_noise(data, t_tr)
 
     def apply_noise(self, data, t_tr, tr_update = None):
-        # if not torch.is_tensor(data['ligand'].pos):
-        #     data['ligand'].pos = random.choice(data['ligand'].pos)
-
         tr_sigma = self.t_to_sigma(t_tr)
         set_time(data, t_tr, 1, self.all_atom, device=None)
-
-        # tr_update = torch.normal(mean=0, std=tr_sigma, size=(1, 3)) if tr_update is None else tr_update
         tr_update = torch.normal(mean=0, std=tr_sigma, size=data['ligand'].pos.shape) if tr_update is None else tr_update
         modify_conformer(data, tr_update)
         
@@ -92,23 +87,14 @@ class PDBBind(Dataset):
             self.preprocessing()
             
         self.files = [f for f in os.listdir(self.full_cache_path) if f.endswith('.pt')]
-            
-
-        # print_statistics(self.complex_graphs)
 
     def len(self):
         return len(self.files)
 
     def get(self, idx):
         file_path = os.path.join(self.full_cache_path, self.files[idx])
-        # Load the tensor from a file
         data = torch.load(file_path)
         return data
-    
-    # ### added
-    # def __getitem__(self, idx):
-    #     return self.complex_graphs[idx]
-    # ###
 
     def preprocessing(self):
         print(f'Processing complexes from [{self.split_path}] and saving it to [{self.full_cache_path}]')
@@ -119,25 +105,19 @@ class PDBBind(Dataset):
         print(f'Loading {len(complex_names_all)} complexes.')
 
         if self.num_workers > 1:
-            #running preprocessing in parallel on multiple workers and saving the progress every 1000 complexes
             complex_names = complex_names_all
-            # lm_embeddings_chains = lm_embeddings_chains_all[1000*i:1000*(i+1)]
             if self.num_workers > 1:
                 p = Pool(self.num_workers, maxtasksperchild=1)
                 p.__enter__()
-#             print('len(complex_names): ', len(complex_names))
-#             print("complex_names: ", complex_names)
             with tqdm(total=len(complex_names), desc=f'loading complexes') as pbar:
                 map_fn = p.imap if self.num_workers > 1 else map
                 for complex, lig in map_fn(self.get_complex, complex_names):
-#                     print('complex: ', complex)
                     full_path = os.path.join(self.full_cache_path, f"{complex[0].name}.pt")
                     torch.save(complex[0], full_path)
                     pbar.update()
             if self.num_workers > 1: p.__exit__(None, None, None)
         else:
             complex_names = complex_names_all
-            # lm_embeddings_chains = lm_embeddings_chains_all[1000*i:1000*(i+1)]
 
             with tqdm(total=len(complex_names), desc=f'loading complexes') as pbar:
                 for complex, lig in map(self.get_complex, complex_names):
@@ -150,22 +130,14 @@ class PDBBind(Dataset):
     def find_lm_embeddings_chains(self, base_name):
         pattern = f"{self.esm_embeddings_path}/{base_name}_chain_*.pt"
     
-        # List all files that match the pattern
         file_list = glob.glob(pattern)
-        
-        # Sort files by the numerical part following '_chain_' in the filenames
         file_list.sort(key=lambda x: int(re.search(r"_chain_(\d+)\.pt$", x).group(1)))
         
-        # Load each model from the sorted files
         lm_embeddings_chains = [torch.load(filename)['representations'][33] for filename in file_list]
         return lm_embeddings_chains
     
     def get_complex(self, name):
         lm_embedding_chains = self.find_lm_embeddings_chains(name)
-        
-        # testing print
-#         print('self.pdbbind_dir: ', self.pdbbind_dir)
-        
         if not os.path.exists(os.path.join(self.pdbbind_dir, name)):
             print("Folder not found", name)
             return [], []
@@ -177,9 +149,7 @@ class PDBBind(Dataset):
             return [], []
         
         ligs = read_mols(self.pdbbind_dir, name, remove_hs=False)
-#         print('rec_model: ', rec_model)
-#         print('rec_lig_model: ', rec_lig_model)
-#         print(ligs)
+
         complex_graphs = []
         failed_indices = []
         for i, lig in enumerate(ligs):
@@ -188,12 +158,11 @@ class PDBBind(Dataset):
                 continue
             complex_graph = HeteroData()
             complex_graph['name'] = f"{name}"
-#             print(complex_graph)
             
             try:
                 get_lig_graph_with_matching(lig, complex_graph, self.popsize, self.maxiter, self.matching, self.keep_original,
                                             self.num_conformers, remove_hs=self.remove_hs)
-                # return
+
                 rec, rec_lig, rec_coords, all_coords, c_alpha_coords, n_coords, c_coords, lm_embeddings = extract_receptor_structure(copy.deepcopy(rec_model), copy.deepcopy(rec_lig_model), lig, lm_embedding_chains=lm_embedding_chains)
 
                 if lm_embeddings is not None and len(c_alpha_coords) != len(lm_embeddings):
@@ -227,8 +196,6 @@ class PDBBind(Dataset):
         for idx_to_delete in sorted(failed_indices, reverse=True):
             del ligs[idx_to_delete]
         
-#         print('complex_graphs: ', complex_graphs)
-#         print('ligs: ', ligs)
         return complex_graphs, ligs
 
 def print_statistics(complex_graphs):
@@ -280,27 +247,13 @@ def construct_loader(args, t_to_sigma):
 
 
 def read_mol(pdbbind_dir, name, remove_hs=False):
-    # lig = read_molecule(os.path.join(pdbbind_dir, name, f'{name}_ligand.sdf'), remove_hs=remove_hs, sanitize=True)
-    # if lig is None:  # read mol2 file if sdf file cannot be sanitized
-    #     print('Using the .sdf file failed. We found a .mol2 file instead and are trying to use that.')
-    
-#     print('read_mol name: ', name)
     lig = read_molecule(os.path.join(pdbbind_dir, name, f'{name}_water.mol2'), remove_hs=remove_hs, sanitize=True)
     return lig
 
 
 def read_mols(pdbbind_dir, name, remove_hs=False):
     ligs = []
-#     print('read_mols name: ', name)
     for file in os.listdir(os.path.join(pdbbind_dir, name)):
-#         print('file: ', file)
-        # if file.endswith(".sdf") and 'rdkit' not in file:
-        #     lig = read_molecule(os.path.join(pdbbind_dir, name, file), remove_hs=remove_hs, sanitize=True)
-        #     if lig is None and os.path.exists(os.path.join(pdbbind_dir, name, file[:-4] + ".mol2")):  # read mol2 file if sdf file cannot be sanitized
-        #         print('Using the .sdf file failed. We found a .mol2 file instead and are trying to use that.')
-        #         lig = read_molecule(os.path.join(pdbbind_dir, name, file[:-4] + ".mol2"), remove_hs=remove_hs, sanitize=True)
-        #     if lig is not None:
-        #         ligs.append(lig)
         if file.endswith(".mol2"):
             lig = read_molecule(os.path.join(pdbbind_dir, name, file[:-5] + ".mol2"), remove_hs=remove_hs, sanitize=True)
             if lig is not None:

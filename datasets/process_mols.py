@@ -195,7 +195,7 @@ def extract_receptor_structure(rec, rec_lig, lig, lm_embedding_chains=None):
                     c = list(atom.get_vector())
                 residue_coords.append(list(atom.get_vector()))
 
-            if c_alpha != None and n != None and c != None: #  and residue.get_id()[0][0] == ' '
+            if c_alpha != None and n != None and c != None:
                 # only append residue if it is an amino acid and not some weird molecule that is part of the complex
                 chain_c_alpha_coords.append(c_alpha)
                 chain_n_coords.append(n)
@@ -206,7 +206,6 @@ def extract_receptor_structure(rec, rec_lig, lig, lm_embedding_chains=None):
             else:
                 chain_lig_coords.append(np.array(residue_coords))
                 invalid_res_ids.append(residue.get_id())
-        # print(invalid_res_ids)
         for res_id in invalid_res_ids:
             chain.detach_child(res_id)
         if len(chain_coords) > 0:
@@ -224,13 +223,6 @@ def extract_receptor_structure(rec, rec_lig, lig, lm_embedding_chains=None):
         n_coords.append(np.array(chain_n_coords))
         c_coords.append(np.array(chain_c_coords))
         if not count == 0: valid_chain_ids.append(chain.get_id())
-
-    # print('lengths: ', lengths)
-    # print('coords: ', len(coords[0]))
-    # print('c_alpha_coords: ', len(c_alpha_coords[0]))
-    # print('n_coords: ', len(n_coords[0]))
-    # print('c_coords: ', len(c_coords[0]))
-    # print('--------------------- enumerate(rec) done ----------------------')
 
     min_distances = np.array(min_distances)
     if len(valid_chain_ids) == 0:
@@ -261,28 +253,16 @@ def extract_receptor_structure(rec, rec_lig, lig, lm_embedding_chains=None):
     n_coords = np.concatenate(valid_n_coords, axis=0)  # [n_residues, 3]
     c_coords = np.concatenate(valid_c_coords, axis=0)  # [n_residues, 3]
 
-    # print('--------------------- enumerate(rec) 2 done ----------------------')
     lm_embeddings = np.concatenate(valid_lm_embeddings, axis=0) if lm_embedding_chains is not None else None
 
-    # print('--------------------- lm_embeddings done ----------------------')
     for invalid_id in invalid_chain_ids:
         rec.detach_child(invalid_id)
-
-    # print('--------------------------------------')
-    # print('chain_lig_coords: ', type(chain_lig_coords))
-    # print('lm_embeddings: ', len(lm_embeddings))
-    # print('c_alpha_coords: ', len(c_alpha_coords))
-    # print('n_coords: ', len(n_coords[0]))
-    # print('c_coords: ', len(c_coords[0]))
-    # print('valid_lengths: ', valid_lengths)
 
     all_coords = [item for sublist in all_coords for item in sublist]
 
     assert len(c_alpha_coords) == len(n_coords)
     assert len(c_alpha_coords) == len(c_coords)
     assert sum(valid_lengths) == len(c_alpha_coords)
-
-    # print('--------------------- return done ----------------------')
 
     return rec, rec_lig, coords, all_coords, c_alpha_coords, n_coords, c_coords, lm_embeddings
 
@@ -302,23 +282,11 @@ def get_lig_graph(mol, complex_graph):
     edge_type = torch.tensor(edge_type, dtype=torch.long)
     edge_attr = F.one_hot(edge_type, num_classes=len(bonds)).to(torch.float)
     
-#     print('atom_feats: ', atom_feats)
-#     sss
-    
     complex_graph['ligand'].x = atom_feats
     complex_graph['ligand'].pos = lig_coords
     complex_graph['ligand', 'lig_bond', 'ligand'].edge_index = edge_index
     complex_graph['ligand', 'lig_bond', 'ligand'].edge_attr = edge_attr
 
-    # testing print out
-    # print()
-    # print(complex_graph.name)
-    # print('atom_feats: ', atom_feats.shape)
-    # print(atom_feats[0])
-    # print('lig_coords: ', lig_coords.shape)
-    # print('edge_index: ', edge_index)
-    # print('edge_attr: ', edge_attr)
-    # print()
     return
 
 def generate_conformer(mol):
@@ -329,8 +297,6 @@ def generate_conformer(mol):
         ps.useRandomCoords = True
         AllChem.EmbedMolecule(mol, ps)
         AllChem.MMFFOptimizeMolecule(mol, confId=0)
-    # else:
-    #    AllChem.MMFFOptimizeMolecule(mol_rdkit, confId=0)
 
 def get_lig_graph_with_matching(mol_, complex_graph, popsize, maxiter, matching, keep_original, num_conformers, remove_hs):
     if matching:
@@ -369,10 +335,10 @@ def get_lig_graph_with_matching(mol_, complex_graph, popsize, maxiter, matching,
                 complex_graph['ligand'].pos.append(torch.from_numpy(mol_rdkit.GetConformer().GetPositions()).float())
 
     else:  # no matching
-        ### original
+       
         if keep_original:
             complex_graph['ligand'].orig_pos = torch.from_numpy(mol_.GetConformer().GetPositions())
-        ###  
+
         complex_graph.rmsd_matching = 0
         if remove_hs: mol_ = RemoveHs(mol_)
         get_lig_graph(mol_, complex_graph)
@@ -452,12 +418,6 @@ def rec_atom_featurizer(rec):
                      safe_index(allowable_features['possible_atom_type_3'], atom_name)]
         atom_feats.append(atom_feat)
 
-    # test feature
-    # print('atom_feats: ', atom_feats)
-    # print('atom_feats: ', atom_feats.shape)
-    # raise ValueError("End get_lig_graph test")
-
-    # end test
     return atom_feats
 
 
@@ -473,8 +433,6 @@ def get_rec_graph(rec, rec_lig, rec_coords, all_coords, c_alpha_coords, n_coords
 
 def get_fullrec_graph(rec, rec_lig, rec_coords, all_coords, c_alpha_coords, n_coords, c_coords, complex_graph, c_alpha_cutoff=20,
                       c_alpha_max_neighbors=None, atom_cutoff=5, atom_max_neighbors=None, remove_hs=False, lm_embeddings=None):
-    # builds the receptor graph with both residues and atoms
-    # print('--------------------- get_fullrec_graph ----------------------')
     n_rel_pos = n_coords - c_alpha_coords
     c_rel_pos = c_coords - c_alpha_coords
     num_residues = len(c_alpha_coords)
@@ -521,14 +479,8 @@ def get_fullrec_graph(rec, rec_lig, rec_coords, all_coords, c_alpha_coords, n_co
     complex_graph['receptor'].mu_r_norm = mu_r_norm
     complex_graph['receptor'].side_chain_vecs = side_chain_vecs.float()
     complex_graph['receptor', 'rec_contact', 'receptor'].edge_index = torch.from_numpy(np.asarray([src_list, dst_list]))
-
-    # print('receptor: ', complex_graph['receptor'].x.shape)
-    # print('pos: ', complex_graph['receptor'].pos.shape)
-    # print('receptor edge_index: ', complex_graph['receptor', 'rec_contact', 'receptor'].edge_index.shape)
     
     src_c_alpha_idx = np.concatenate([np.asarray([i]*len(l)) for i, l in enumerate(all_coords)])
-
-    # print(src_c_alpha_idx)
     
     atom_feat = torch.from_numpy(np.asarray(rec_atom_featurizer(rec_lig)))
     atom_coords = torch.from_numpy(np.concatenate(all_coords, axis=0)).float()
@@ -546,11 +498,6 @@ def get_fullrec_graph(rec, rec_lig, rec_coords, all_coords, c_alpha_coords, n_co
     complex_graph['atom', 'atom_contact', 'atom'].edge_index = atoms_edge_index
     complex_graph['atom', 'atom_rec_contact', 'receptor'].edge_index = atom_res_edge_index
 
-    # print('atom_feat: ', atom_feat.shape)
-    # print('pos: ', atom_coords.shape)
-    # print('atom_res_edge_index: ', atom_res_edge_index.shape)
-    # print('atoms_edge_index: ', atoms_edge_index.shape)
-    
     return
 
 def write_mol_with_coords(mol, new_coords, path):
