@@ -1,0 +1,10 @@
+biopandas
+biopython
+pandas
+rdkit-pypi
+torch_geometric
+torch_cluster
+torch_scatter
+e3nn
+spyrmsd
+openbabel-wheel
