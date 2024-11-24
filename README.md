@@ -121,7 +121,8 @@ The animation below illustrates how randomly distributed water molecules in 3D s
 ![Inference Animation](./images/inference_out/4YL4.gif)
 
 ---
-## Coming Soon
+## Coming Soon (After my final exams)
 - Detailed retraining instructions
 - Memory optimization for large proteins
 - Improved handling of dummy water files during preprocessing
+- Script for evaluation metrics and visualization
