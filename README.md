@@ -6,30 +6,30 @@ For any questions, feel free to open an issue or contact us at: xiaohan.kuang@va
 
 ## Overview
 
-### Diffusion Process
-<img src="./images/model_arch/diffusion_process.png" height="300"/>
+<!-- ### Diffusion Process
+<img src="./images/model_arch/diffusion_process.png" height="300"/> -->
 
 ### Model Architecture
 <img src="./images/model_arch/superwater_model_arch.png" height="300"/>
 
-## System Requirements
+## Data Availability
+The dataset used in this project can be found at [Zenodo](https://doi.org/10.5281/zenodo.14166655).  
+Download the `waterbind.zip` file, which contains 17,092 protein PDB IDs and their corresponding water molecule files.
 
-- **GPU**: Minimum 40GB memory (e.g., NVIDIA A100)
-  - Required for memory-intensive reverse diffusion steps, particularly for large proteins (>600 residues)
-  - Memory optimization for large proteins will be addressed in future updates
-- **Training Hardware**: 4x NVIDIA A100 80GB GPUs (if retraining)
-
-## Installation
-
-1. Install required Python packages:
+## Environment Setup
+1. Create the Conda environment by running:
     ```bash
-    pip install -r requirements.txt
-    pip install "fair-esm[esmfold]"
+    conda env create -f environment.yml
+    ```
+
+    Activate the environment:
+    ```bash
+    conda activate superwater
     ```
 
 2. Set up ESM:
     
-   Clone the [ESM GitHub repository](https://github.com/facebookresearch/esm) and save it under `esm/` in your project directory.
+   Clone the [ESM GitHub repository](https://github.com/facebookresearch/esm) and save it under `esm/` in the project directory.
 
 ## Dataset Preparation
 1. Create your test dataset structure:
@@ -42,7 +42,27 @@ For any questions, feel free to open an issue or contact us at: xiaohan.kuang@va
             └── 5SRF_water.pdb                  # Dummy file with random water coordinates
     ```
 
-    **Note:** Dummy water molecule files are placeholders required for structure preloading. Improvements for handling these files are planned for future updates.
+    **Note:** (For Inference Only) Dummy water molecule files are placeholders required for structure preloading. Improvements for handling these files are planned for future updates.
+
+    `<pdb_id>_water.pdb`
+    ```
+    HETATM    1  O   HOH A   1      0.000   0.000   0.000  1.00 0.00           O  
+    TER       2      HOH A   1                                                    
+    END  
+    ```
+
+    `<pdb_id>_water.mol2`
+    ```
+    @<TRIPOS>MOLECULE  
+    1 0 0 0 0  
+    SMALL  
+    GASTEIGER  
+
+    @<TRIPOS>ATOM  
+        1  O         0.0000    0.0000    0.0000  O.3   1    HOH1       0.0000  
+
+    @<TRIPOS>BOND  
+    ```
 
 2. Create a test split file:
     ```
@@ -50,6 +70,92 @@ For any questions, feel free to open an issue or contact us at: xiaohan.kuang@va
     ```
     Refer to `test_res15.txt` for an example.
 
+## Retraining Process
+<details>
+<summary><strong>Click to expand retraining details</strong></summary>
+
+### Step 1: Generate ESM Embeddings
+
+1. **Prepare FASTA files**:
+    ```bash
+    python datasets/esm_embedding_preparation_water.py \
+    --data_dir data/waterbind \
+    --out_file data/prepared_for_esm_dataset_waterbind.fasta
+    ```
+2. **Generate embeddings**:
+    ```bash
+    cd data
+
+    python ../esm/scripts/extract.py esm2_t33_650M_UR50D prepared_for_esm_dataset_waterbind.fasta \
+    dataset_waterbind_embeddings_output --repr_layers 33 --include per_tok --truncation_seq_length 4096
+    
+    cd ..
+    ```
+
+### Step 2: Train the Score Model
+```bash
+python -m train \
+--run_name all_atoms_score_model_res15_17092_retrain \
+--test_sigma_intervals \
+--esm_embeddings_path data/dataset_waterbind_embeddings_output \
+--data_dir data/waterbind \
+--split_train data/splits/train_res15.txt \
+--split_val data/splits/val_res15.txt \
+--split_test data/splits/test_res15.txt \
+--log_dir workdir \
+--lr 1e-3 --tr_sigma_min 0.1 --tr_sigma_max 30 \
+--batch_size 8 \
+--ns 24 --nv 6 \
+--num_conv_layers 3 \
+--dynamic_max_cross \
+--scheduler plateau --scale_by_sigma \
+--dropout 0.1 --all_atoms \
+--c_alpha_max_neighbors 24 --remove_hs \
+--receptor_radius 15 \
+--num_dataloader_workers 10 \
+--num_workers 10 \
+--wandb \
+--cudnn_benchmark \
+--use_ema --distance_embed_dim 64 \
+--cross_distance_embed_dim 64 \
+--sigma_embed_dim 64 \
+--scheduler_patience 30 \
+--n_epochs 300
+```
+
+### Step 3: Train the Confidence Model
+```bash
+python -m confidence.confidence_train \
+--original_model_dir workdir/all_atoms_score_model_res15_17092_retrain \
+--data_dir data/waterbind \
+--all_atoms \
+--run_name confidence_model_retrain \
+--split_train data/splits/train_res15.txt \
+--split_val data/splits/val_res15.txt \
+--split_test data/splits/test_res15.txt \
+--inference_steps 20 \
+--batch_size 8 \
+--n_epochs 50 \
+--wandb \
+--lr 1e-3 \
+--ns 24 \
+--nv 6 \
+--num_conv_layers 3 \
+--dynamic_max_cross \
+--scale_by_sigma \
+--dropout 0.1 \
+--remove_hs \
+--esm_embeddings_path data/test_embeddings_output \
+--cache_creation_id 1 \
+--cache_ids_to_combine 1 \
+--running_mode train \
+--mad_prediction
+```
+**Note**: If GPU memory is limited, consider adjusting:
+```
+--water_ratio 10
+```
+</details>
 
 ## Running Inference
 
@@ -77,40 +183,41 @@ For any questions, feel free to open an issue or contact us at: xiaohan.kuang@va
 Run the following command to perform inference:
 
 ```bash
-python -m validation_recall_precision \
+python -m inference_water_pos \
 --original_model_dir workdir/all_atoms_score_model_res15_17092 \
 --confidence_dir workdir/confidence_model_17092_sigmoid_rr15 \
 --data_dir data/test_dataset \
 --ckpt best_model.pt \
 --all_atoms \
---run_name evaluation_all_atoms \
 --cache_path data/cache_confidence \
 --split_test data/splits/test.txt \
 --inference_steps 20 \
---samples_per_complex 1 \
---batch_size 1 \
---batch_size_preprocessing 1 \
 --esm_embeddings_path data/test_dataset_embeddings_output \
---cache_creation_id 1 \
---cache_ids_to_combine 1 \
---prob_thresh 0.05 \
+--cap 0.1 \
 --running_mode test \
---rmsd_prediction \
+--mad_prediction \
 --save_pos
 ```
 
 **Key Parameters**:
 - `--data_dir`: Path to your test dataset folder (e.g., `data/test_dataset`)
 - `--split_test`: Path to the test PDB IDs file (e.g., `data/splits/test.txt`)
-- `--prob_thresh`: Probability cutoff for water molecule sampling (higher values increase precision but reduce coverage)
+- `--cap`: Probability cutoff for water molecule sampling 
+    - Higher values increase precision but reduce coverage 
+    - Acceptable range: [0.02, 0.5]
 - `--save_pos`: Saves sampled water molecule positions as `.pdb` files
 
-If you encounter out-of-memory issues, consider modifying `confidence/dataset.py` by reducing the value of `water_ratio = 15` at line 203 to a smaller value. Note that this may reduce prediction accuracy.
+**Note**:
+- Adjust the `--water_ratio` to 10 or lower when running inference to reduce memory usage.
+- When changing the dataset or adjusting parameters for resampling, ensure to either
+    - Change the cache path using `--cache_path`
+    - Delete the existing cache to avoid conflicts
 
-**Output**:
+### Output:
+
 Predicted water molecule positions will be saved as `.pdb` files in:
 ```
-inference_out/inferenced_pos_cap<prob_thresh>/
+inference_out/inferenced_pos_cap<#>/
 ```
 
 ## Inference Animation
@@ -118,9 +225,3 @@ inference_out/inferenced_pos_cap<prob_thresh>/
 The animation below illustrates how randomly distributed water molecules in 3D space align to their predicted positions on the protein surface during the reverse diffusion process.
 
 ![Inference Animation](./images/inference_out/4YL4.gif)
-
-## Coming Soon (After my final exams)
-- Detailed retraining instructions
-- Memory optimization for large proteins
-- Improved handling of dummy water files during preprocessing
-- Script for evaluation metrics and visualization
