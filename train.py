@@ -16,9 +16,8 @@ import yaml
 
 from utils.diffusion_utils import t_to_sigma as t_to_sigma_compl
 from datasets.pdbbind import construct_loader
-from datasets.reduced_dataset import DataLoaderSubset
 from utils.parsing import parse_train_args
-from utils.training import train_epoch, test_epoch, loss_function, inference_epoch, inference_epoch_new
+from utils.training import train_epoch, test_epoch, loss_function
 from utils.utils import save_yaml_file, get_optimizer_and_scheduler, get_model, ExponentialMovingAverage
 
 
@@ -43,12 +42,6 @@ def train(args, model, optimizer, scheduler, ema_weights, train_loader, val_load
         print("Epoch {}: Validation loss {:.4f}  tr {:.4f} "
               .format(epoch, val_losses['loss'], val_losses['tr_loss']))
 
-        if args.val_inference_freq != None and (epoch + 1) % args.val_inference_freq == 0:
-            inf_metrics = inference_epoch_new(model, infer_loader, device, t_to_sigma, args, cutoff_num=True)
-            print("Epoch {}: Val inference rmsds_lt2 {:.3f} rmsds_lt5 {:.3f}"
-                  .format(epoch, inf_metrics['rmsds_lt2'], inf_metrics['rmsds_lt5']))
-            logs.update({'valinf_' + k: v for k, v in inf_metrics.items()}, step=epoch + 1)
-
         if not args.use_ema: ema_weights.copy_to(model.parameters())
         ema_state_dict = copy.deepcopy(model.module.state_dict() if device.type == 'cuda' else model.state_dict())
         ema_weights.restore(model.parameters())
@@ -60,13 +53,6 @@ def train(args, model, optimizer, scheduler, ema_weights, train_loader, val_load
             wandb.log(logs, step=epoch + 1)
 
         state_dict = model.module.state_dict() if device.type == 'cuda' else model.state_dict()
-        if args.inference_earlystop_metric in logs.keys() and \
-                (args.inference_earlystop_goal == 'min' and logs[args.inference_earlystop_metric] <= best_val_inference_value or
-                 args.inference_earlystop_goal == 'max' and logs[args.inference_earlystop_metric] >= best_val_inference_value):
-            best_val_inference_value = logs[args.inference_earlystop_metric]
-            best_val_inference_epoch = epoch
-            torch.save(state_dict, os.path.join(run_dir, 'best_inference_epoch_model.pt'))
-            torch.save(ema_state_dict, os.path.join(run_dir, 'best_ema_inference_epoch_model.pt'))
         if val_losses['loss'] <= best_val_loss:
             best_val_loss = val_losses['loss']
             best_epoch = epoch
@@ -87,7 +73,6 @@ def train(args, model, optimizer, scheduler, ema_weights, train_loader, val_load
         }, os.path.join(run_dir, 'last_model.pt'))
 
     print("Best Validation Loss {} on Epoch {}".format(best_val_loss, best_epoch))
-    print("Best inference metric {} on Epoch {}".format(best_val_inference_value, best_val_inference_epoch))
 
 def set_seed(seed: int = 42) -> None:
         np.random.seed(seed)

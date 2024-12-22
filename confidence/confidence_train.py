@@ -22,88 +22,10 @@ import yaml
 from utils.utils import save_yaml_file, get_optimizer_and_scheduler, get_model
 from utils.diffusion_utils import t_to_sigma as t_to_sigma_compl
 from confidence.dataset import get_args
+from utils.parsing import parse_confidence_args
 
-parser = ArgumentParser()
-parser.add_argument('--config', type=FileType(mode='r'), default=None)
-parser.add_argument('--original_model_dir', type=str, default='workdir', help='Path to folder with trained model and hyperparameters')
-parser.add_argument('--original_pdb_dir', type=str, default='workdir', help='Path to folder with original PDB file downloaded from PDB website')
-parser.add_argument('--restart_dir', type=str, default=None, help='')
-parser.add_argument('--use_original_model_cache', action='store_true', default=False, help='If this is true, the same dataset as in the original model will be used. Otherwise, the dataset parameters are used.')
-parser.add_argument('--data_dir', type=str, default='data/waterbind/', help='Folder containing original structures')
-parser.add_argument('--ckpt', type=str, default='best_model.pt', help='Checkpoint to use inside the folder')
-parser.add_argument('--model_save_frequency', type=int, default=0, help='Frequency with which to save the last model. If 0, then only the early stopping criterion best model is saved and overwritten.')
-parser.add_argument('--best_model_save_frequency', type=int, default=0, help='Frequency with which to save the best model. If 0, then only the early stopping criterion best model is saved and overwritten.')
-parser.add_argument('--run_name', type=str, default='test_confidence', help='')
-parser.add_argument('--project', type=str, default='diffwater_confidence', help='')
-parser.add_argument('--split_train', type=str, default='data/splits/timesplit_no_lig_overlap_train', help='Path of file defining the split')
-parser.add_argument('--split_val', type=str, default='data/splits/timesplit_no_lig_overlap_val', help='Path of file defining the split')
-parser.add_argument('--split_test', type=str, default='data/splits/timesplit_test', help='Path of file defining the split')
+args = parse_confidence_args()
 
-# Inference parameters for creating the positions and rmsds that the confidence predictor will be trained on.
-parser.add_argument('--cache_path', type=str, default='data/cacheNew', help='Folder from where to load/restore cached dataset')
-parser.add_argument('--cache_ids_to_combine', nargs='+', type=str, default=None, help='RMSD value below which a prediction is considered a postitive. This can also be multiple cutoffs.')
-parser.add_argument('--cache_creation_id', type=int, default=None, help='number of times that inference is run on the full dataset before concatenating it and coming up with the full confidence dataset')
-parser.add_argument('--wandb', action='store_true', default=False, help='')
-parser.add_argument('--inference_steps', type=int, default=2, help='Number of denoising steps')
-parser.add_argument('--samples_per_complex', type=int, default=3, help='')
-parser.add_argument('--balance', action='store_true', default=False, help='If this is true than we do not force the samples seen during training to be the same amount of negatives as positives')
-parser.add_argument('--rmsd_prediction', action='store_true', default=False, help='')
-parser.add_argument('--rmsd_classification_cutoff', type=float, default=2, help='RMSD value below which a prediction is considered a postitive. This can also be multiple cutoffs.')
-
-parser.add_argument('--log_dir', type=str, default='workdir', help='')
-parser.add_argument('--main_metric', type=str, default='accuracy', help='Metric to track for early stopping. Mostly [loss, accuracy, ROC AUC]')
-parser.add_argument('--main_metric_goal', type=str, default='max', help='Can be [min, max]')
-parser.add_argument('--transfer_weights', action='store_true', default=False, help='')
-parser.add_argument('--batch_size', type=int, default=5, help='')
-parser.add_argument('--batch_size_preprocessing', type=int, default=4, help='Number of workers')
-parser.add_argument('--lr', type=float, default=1e-3, help='')
-parser.add_argument('--w_decay', type=float, default=0.0, help='')
-parser.add_argument('--scheduler', type=str, default='plateau', help='')
-parser.add_argument('--scheduler_patience', type=int, default=20, help='')
-parser.add_argument('--n_epochs', type=int, default=5, help='')
-
-# Dataset
-parser.add_argument('--limit_complexes', type=int, default=0, help='')
-parser.add_argument('--all_atoms', action='store_true', default=False, help='')
-parser.add_argument('--multiplicity', type=int, default=1, help='')
-parser.add_argument('--chain_cutoff', type=float, default=10, help='')
-parser.add_argument('--receptor_radius', type=float, default=30, help='')
-parser.add_argument('--c_alpha_max_neighbors', type=int, default=10, help='')
-parser.add_argument('--atom_radius', type=float, default=5, help='')
-parser.add_argument('--atom_max_neighbors', type=int, default=8, help='')
-parser.add_argument('--matching_popsize', type=int, default=20, help='')
-parser.add_argument('--matching_maxiter', type=int, default=20, help='')
-parser.add_argument('--max_lig_size', type=int, default=None, help='Maximum number of heavy atoms')
-parser.add_argument('--remove_hs', action='store_true', default=False, help='remove Hs')
-parser.add_argument('--num_conformers', type=int, default=1, help='')
-parser.add_argument('--esm_embeddings_path', type=str, default=None,help='If this is set then the LM embeddings at that path will be used for the receptor features')
-parser.add_argument('--no_torsion', action='store_true', default=False, help='')
-
-# Model
-parser.add_argument('--num_conv_layers', type=int, default=2, help='Number of interaction layers')
-parser.add_argument('--max_radius', type=float, default=5.0, help='Radius cutoff for geometric graph')
-parser.add_argument('--scale_by_sigma', action='store_true', default=True, help='Whether to normalise the score')
-parser.add_argument('--ns', type=int, default=16, help='Number of hidden features per node of order 0')
-parser.add_argument('--nv', type=int, default=4, help='Number of hidden features per node of order >0')
-parser.add_argument('--distance_embed_dim', type=int, default=32, help='')
-parser.add_argument('--cross_distance_embed_dim', type=int, default=32, help='')
-parser.add_argument('--no_batch_norm', action='store_true', default=False, help='If set, it removes the batch norm')
-parser.add_argument('--use_second_order_repr', action='store_true', default=False, help='Whether to use only up to first order representations or also second')
-parser.add_argument('--cross_max_distance', type=float, default=80, help='')
-parser.add_argument('--dynamic_max_cross', action='store_true', default=False, help='')
-parser.add_argument('--dropout', type=float, default=0.0, help='MLP dropout')
-parser.add_argument('--embedding_type', type=str, default="sinusoidal", help='')
-parser.add_argument('--sigma_embed_dim', type=int, default=32, help='')
-parser.add_argument('--embedding_scale', type=int, default=10000, help='')
-parser.add_argument('--confidence_no_batchnorm', action='store_true', default=False, help='')
-parser.add_argument('--confidence_dropout', type=float, default=0.0, help='MLP dropout in confidence readout')
-
-parser.add_argument('--num_workers', type=int, default=1, help='Number of workers')
-parser.add_argument('--running_mode', type=str, default='train', help='Determine water number')
-parser.add_argument('--add_perturbation', action='store_true', default=False, help='')
-
-
-args = parser.parse_args()
 if args.config:
     config_dict = yaml.load(args.config, Loader=yaml.FullLoader)
     arg_dict = args.__dict__
@@ -136,7 +58,7 @@ def sigmoid_function(target, scale=4):
     return (2/(1+torch.exp(-(scale*target)/torch.log(torch.tensor(2))))-1)**2
 
 
-def train_epoch(model, loader, optimizer, rmsd_prediction):
+def train_epoch(model, loader, optimizer, mad_prediction):
     model.train()
     meter = AverageMeter(['confidence_loss'])
 
@@ -146,12 +68,12 @@ def train_epoch(model, loader, optimizer, rmsd_prediction):
         optimizer.zero_grad()
         try:
             pred = model(data)
-            if rmsd_prediction:
-                labels = torch.cat([graph.rmsd for graph in data]).to(device) if isinstance(data, list) else data.rmsd
+            if mad_prediction:
+                labels = torch.cat([graph.mad for graph in data]).to(device) if isinstance(data, list) else data.mad
                 norm_labels = sigmoid_function(labels)
                 confidence_loss = F.mse_loss(pred, norm_labels)
             else:
-                if isinstance(args.rmsd_classification_cutoff, list):
+                if isinstance(args.mad_classification_cutoff, list):
                     labels = torch.cat([graph.y_binned for graph in data]).to(device) if isinstance(data, list) else data.y_binned
                     confidence_loss = F.cross_entropy(pred, labels)
                 else:    
@@ -174,9 +96,9 @@ def train_epoch(model, loader, optimizer, rmsd_prediction):
 
     return meter.summary()
 
-def test_epoch(model, loader, rmsd_prediction):
+def test_epoch(model, loader, mad_prediction):
     model.eval()
-    meter = AverageMeter(['confidence_loss'], unpooled_metrics=True) if rmsd_prediction else AverageMeter(['confidence_loss', 'accuracy', 'ROC AUC'], unpooled_metrics=True)
+    meter = AverageMeter(['confidence_loss'], unpooled_metrics=True) if mad_prediction else AverageMeter(['confidence_loss', 'accuracy', 'ROC AUC'], unpooled_metrics=True)
     all_labels = []
     for data in tqdm(loader, total=len(loader)):
         try:
@@ -184,13 +106,13 @@ def test_epoch(model, loader, rmsd_prediction):
                 pred = model(data)
             affinity_loss = torch.tensor(0.0, dtype=torch.float, device=pred[0].device)
             accuracy = torch.tensor(0.0, dtype=torch.float, device=pred[0].device)
-            if rmsd_prediction:
-                labels = torch.cat([graph.rmsd for graph in data]).to(device) if isinstance(data, list) else data.rmsd
+            if mad_prediction:
+                labels = torch.cat([graph.mad for graph in data]).to(device) if isinstance(data, list) else data.mad
                 norm_labels = sigmoid_function(labels)
                 confidence_loss = F.mse_loss(pred, norm_labels)
                 meter.add([confidence_loss.cpu().detach()])
             else:
-                if isinstance(args.rmsd_classification_cutoff, list):
+                if isinstance(args.mad_classification_cutoff, list):
                     labels = torch.cat([graph.y_binned for graph in data]).to(device) if isinstance(data,list) else data.y_binned
                     confidence_loss = F.cross_entropy(pred, labels)
                 else:
@@ -221,7 +143,7 @@ def test_epoch(model, loader, rmsd_prediction):
 
     all_labels = torch.cat(all_labels)
 
-    if rmsd_prediction:
+    if mad_prediction:
         baseline_metric = ((all_labels - all_labels.mean()).abs()).mean()
     else:
         baseline_metric = all_labels.sum() / len(all_labels)
@@ -237,10 +159,10 @@ def train(args, model, optimizer, scheduler, train_loader, val_loader, run_dir):
     print("Starting training...")
     for epoch in range(args.n_epochs):
         logs = {}
-        train_metrics = train_epoch(model, train_loader, optimizer, args.rmsd_prediction)
+        train_metrics = train_epoch(model, train_loader, optimizer, args.mad_prediction)
         print("Epoch {}: Training loss {:.4f}".format(epoch, train_metrics['confidence_loss']))
-        val_metrics, baseline_metric = test_epoch(model, val_loader, args.rmsd_prediction)
-        if args.rmsd_prediction:
+        val_metrics, baseline_metric = test_epoch(model, val_loader, args.mad_prediction)
+        if args.mad_prediction:
             print("Epoch {}: Validation loss {:.4f}".format(epoch, val_metrics['confidence_loss']))
         else:
             print("Epoch {}: Validation loss {:.4f}  accuracy {:.4f}".format(epoch, val_metrics['confidence_loss'], val_metrics['accuracy']))
@@ -248,7 +170,7 @@ def train(args, model, optimizer, scheduler, train_loader, val_loader, run_dir):
         if args.wandb:
             logs.update({'valinf_' + k: v for k, v in val_metrics.items()}, step=epoch + 1)
             logs.update({'train_' + k: v for k, v in train_metrics.items()}, step=epoch + 1)
-            logs.update({'mean_rmsd' if args.rmsd_prediction else 'fraction_positives': baseline_metric,
+            logs.update({'mean_mad' if args.mad_prediction else 'fraction_positives': baseline_metric,
                          'current_lr': optimizer.param_groups[0]['lr']})
             wandb.log(logs, step=epoch + 1)
 
@@ -278,7 +200,6 @@ def train(args, model, optimizer, scheduler, train_loader, val_loader, run_dir):
 def construct_loader_origin(args_confidence, args, t_to_sigma):
     ## the only difference compared to construct_loader is that we set batch_size = 1
     ## and we used DataLoader not DataLoaderList
-
     common_args = {'transform': None, 'root': args.data_dir, 'limit_complexes': args.limit_complexes,
                    'receptor_radius': args.receptor_radius,
                    'c_alpha_max_neighbors': args.c_alpha_max_neighbors,
@@ -286,7 +207,7 @@ def construct_loader_origin(args_confidence, args, t_to_sigma):
                    'popsize': args.matching_popsize, 'maxiter': args.matching_maxiter,
                    'num_workers': args.num_workers, 'all_atoms': args.all_atoms,
                    'atom_radius': args.atom_radius, 'atom_max_neighbors': args.atom_max_neighbors,
-                   'esm_embeddings_path': args.esm_embeddings_path}    
+                   'esm_embeddings_path': args.esm_embeddings_path}
     train_dataset = PDBBind(cache_path=args.cache_path, split_path=args_confidence.split_train, keep_original=True,
                             num_conformers=args.num_conformers, **common_args)
     val_dataset = PDBBind(cache_path=args.cache_path, split_path=args_confidence.split_val, keep_original=True, **common_args)
@@ -302,11 +223,13 @@ def construct_loader_confidence(args, device):
     common_args = {'cache_path': args.cache_path, 'original_model_dir': args.original_model_dir, 'device': device,
                    'inference_steps': args.inference_steps, 'samples_per_complex': args.samples_per_complex,
                    'limit_complexes': args.limit_complexes, 'all_atoms': args.all_atoms, 'balance': args.balance,
-                   'rmsd_classification_cutoff': args.rmsd_classification_cutoff, 'use_original_model_cache': args.use_original_model_cache,
+                   'mad_classification_cutoff': args.mad_classification_cutoff, 'use_original_model_cache': args.use_original_model_cache,
                    'cache_creation_id': args.cache_creation_id, "cache_ids_to_combine": args.cache_ids_to_combine,
                    "model_ckpt": args.ckpt,
                    "running_mode": args.running_mode,
-                   "add_perturbation": args.add_perturbation}
+                   "water_ratio": args.water_ratio,
+                   "resample_steps": args.resample_steps}
+    
     loader_class = DataListLoader if torch.cuda.is_available() else DataLoader
     exception_flag = False
     # construct original loader

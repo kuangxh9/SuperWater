@@ -64,8 +64,8 @@ def find_tp_coords(real_water_pos, predicted_water_pos, threshold=1.0):
 class ConfidenceDataset(Dataset):
     def __init__(self, loader, cache_path, original_model_dir, split, device, limit_complexes,
                  inference_steps, samples_per_complex, all_atoms,
-                 args, model_ckpt, balance=False, use_original_model_cache=True, rmsd_classification_cutoff=2,
-                 cache_ids_to_combine=None, cache_creation_id=None, running_mode=None, add_perturbation=False):
+                 args, model_ckpt, balance=False, use_original_model_cache=True, mad_classification_cutoff=2,
+                 cache_ids_to_combine=None, cache_creation_id=None, running_mode=None, water_ratio=15, resample_steps=1):
 
         super(ConfidenceDataset, self).__init__()
         self.loader = loader
@@ -76,15 +76,16 @@ class ConfidenceDataset(Dataset):
         self.original_model_dir = original_model_dir
         self.balance = balance
         self.use_original_model_cache = use_original_model_cache
-        self.rmsd_classification_cutoff = rmsd_classification_cutoff
+        self.mad_classification_cutoff = mad_classification_cutoff
         self.cache_ids_to_combine = cache_ids_to_combine
         self.cache_creation_id = cache_creation_id
         self.samples_per_complex = samples_per_complex
         self.model_ckpt = model_ckpt
         self.args = args
-        self.add_perturbation = add_perturbation
         
         self.running_mode = running_mode
+        self.water_ratio = water_ratio
+        self.resample_steps = resample_steps
         
         self.original_model_args, original_model_cache = get_args(original_model_dir), self.loader.dataset.full_cache_path
         
@@ -92,47 +93,47 @@ class ConfidenceDataset(Dataset):
         self.full_cache_path = os.path.join(cache_path, f'model_{os.path.splitext(os.path.basename(original_model_dir))[0]}'
                                             f'_split_{split}_limit_{limit_complexes}')
         print("cache path is ", self.full_cache_path)
-        if (not os.path.exists(os.path.join(self.full_cache_path, "ligand_positions.pkl")) and self.cache_creation_id is None) or \
-            (not os.path.exists(os.path.join(self.full_cache_path, f"ligand_positions_id{self.cache_creation_id}.pkl")) and self.cache_creation_id is not None):
+        if (not os.path.exists(os.path.join(self.full_cache_path, "water_positions.pkl")) and self.cache_creation_id is None) or \
+            (not os.path.exists(os.path.join(self.full_cache_path, f"water_positions_id{self.cache_creation_id}.pkl")) and self.cache_creation_id is not None):
             os.makedirs(self.full_cache_path, exist_ok=True)
             self.preprocessing(original_model_cache)
         
-        all_rmsds_unsorted, all_full_ligand_positions_unsorted, all_names_unsorted = [], [], []
+        all_mads_unsorted, all_full_water_positions_unsorted, all_names_unsorted = [], [], []
         for idx, cache_id in enumerate(self.cache_ids_to_combine):
-            print(f'HAPPENING | Loading positions and rmsds from cache_id from the path: {os.path.join(self.full_cache_path, "ligand_positions_"+ str(cache_id)+ ".pkl")}')
-            if not os.path.exists(os.path.join(self.full_cache_path, f"ligand_positions_id{cache_id}.pkl")): raise Exception(f'The generated ligand positions with cache_id do not exist: {cache_id}') # be careful with changing this error message since it is sometimes cought in a try catch
-            with open(os.path.join(self.full_cache_path, f"ligand_positions_id{cache_id}.pkl"), 'rb') as f:
-                full_ligand_positions, rmsds = pickle.load(f)
+            print(f'HAPPENING | Loading positions and MADs from cache_id from the path: {os.path.join(self.full_cache_path, "water_positions_"+ str(cache_id)+ ".pkl")}')
+            if not os.path.exists(os.path.join(self.full_cache_path, f"water_positions_id{cache_id}.pkl")): raise Exception(f'The generated water positions with cache_id do not exist: {cache_id}') # be careful with changing this error message since it is sometimes cought in a try catch
+            with open(os.path.join(self.full_cache_path, f"water_positions_id{cache_id}.pkl"), 'rb') as f:
+                full_water_positions, mads = pickle.load(f)
             with open(os.path.join(self.full_cache_path, f"complex_names_in_same_order_id{cache_id}.pkl"), 'rb') as f:
                 names_unsorted = pickle.load(f)
             all_names_unsorted.append(names_unsorted)
-            all_rmsds_unsorted.append(rmsds)
-            all_full_ligand_positions_unsorted.append(full_ligand_positions)
+            all_mads_unsorted.append(mads)
+            all_full_water_positions_unsorted.append(full_water_positions)
 
         names_order = list(set(sum(all_names_unsorted, [])))
-        all_rmsds, all_full_ligand_positions, all_names = [], [], []
-        for idx, (rmsds_unsorted, full_ligand_positions_unsorted, names_unsorted) in enumerate(zip(all_rmsds_unsorted,all_full_ligand_positions_unsorted, all_names_unsorted)):
-            name_to_pos_dict = {name: (rmsd, pos) for name, rmsd, pos in zip(names_unsorted, full_ligand_positions_unsorted, rmsds_unsorted) }
-            intermediate_rmsds = [name_to_pos_dict[name][1] for name in names_order]
-            all_rmsds.append((intermediate_rmsds))
+        all_mads, all_full_water_positions, all_names = [], [], []
+        for idx, (mads_unsorted, full_water_positions_unsorted, names_unsorted) in enumerate(zip(all_mads_unsorted,all_full_water_positions_unsorted, all_names_unsorted)):
+            name_to_pos_dict = {name: (mad, pos) for name, mad, pos in zip(names_unsorted, full_water_positions_unsorted, mads_unsorted) }
+            intermediate_mads = [name_to_pos_dict[name][1] for name in names_order]
+            all_mads.append((intermediate_mads))
             intermediate_pos = [name_to_pos_dict[name][0] for name in names_order]
-            all_full_ligand_positions.append((intermediate_pos))
+            all_full_water_positions.append((intermediate_pos))
             
-        self.full_ligand_positions, self.rmsds = [], []
-        for positions_tuple in list(zip(*all_full_ligand_positions)):
-            self.full_ligand_positions.append(np.concatenate(positions_tuple, axis=0))
-        for positions_tuple in list(zip(*all_rmsds)):
-            self.rmsds.append(np.concatenate(positions_tuple, axis=0))
-        generated_rmsd_complex_names = names_order
+        self.full_water_positions, self.mads = [], []
+        for positions_tuple in list(zip(*all_full_water_positions)):
+            self.full_water_positions.append(np.concatenate(positions_tuple, axis=0))
+        for positions_tuple in list(zip(*all_mads)):
+            self.mads.append(np.concatenate(positions_tuple, axis=0))
+        generated_mad_complex_names = names_order
         
         print('Number of complex graphs: ', len(self.loader.dataset))
             
-        print('Number of RMSDs and positions for the complex graphs: ', len(self.full_ligand_positions))
+        print('Number of MADs and positions for the complex graphs: ', len(self.full_water_positions))
 
         self.all_samples_per_complex = samples_per_complex * (1 if self.cache_ids_to_combine is None else len(self.cache_ids_to_combine))
 
-        self.positions_rmsds_dict = {name: (pos, rmsd) for name, pos, rmsd in zip (generated_rmsd_complex_names, self.full_ligand_positions, self.rmsds)}
-        self.dataset_names = list(self.positions_rmsds_dict.keys())
+        self.positions_mads_dict = {name: (pos, mad) for name, pos, mad in zip (generated_mad_complex_names, self.full_water_positions, self.mads)}
+        self.dataset_names = list(self.positions_mads_dict.keys())
         if limit_complexes > 0:
             self.dataset_names = self.dataset_names[:limit_complexes]
 
@@ -142,14 +143,14 @@ class ConfidenceDataset(Dataset):
     def get(self, idx):
         complex_name = self.dataset_names[idx]
         complex_graph = torch.load(os.path.join(self.loader.dataset.full_cache_path, f"{complex_name}.pt"))
-        positions, rmsds = self.positions_rmsds_dict[self.dataset_names[idx]]
+        positions, mads = self.positions_mads_dict[self.dataset_names[idx]]
         
         assert(complex_graph.name == self.dataset_names[idx])
         complex_graph['ligand'].x =  complex_graph['ligand'].x[-1].repeat(positions.shape[-2], 1)
         if self.balance:
-            if isinstance(self.rmsd_classification_cutoff, list): raise ValueError("a list for --rmsd_classification_cutoff can only be used without --balance")
+            if isinstance(self.mad_classification_cutoff, list): raise ValueError("a list for --mad_classification_cutoff can only be used without --balance")
             label = random.randint(0, 1)
-            success = rmsds < self.rmsd_classification_cutoff
+            success = mads < self.mad_classification_cutoff
             n_success = np.count_nonzero(success)
             if label == 0 and n_success != self.all_samples_per_complex:
                 # sample negative complexpr
@@ -167,13 +168,13 @@ class ConfidenceDataset(Dataset):
             sample = random.randint(0, self.all_samples_per_complex - 1)
             
             complex_graph['ligand'].pos = torch.from_numpy(positions[sample])
-            complex_graph.y = torch.tensor(rmsds < self.rmsd_classification_cutoff).float()
+            complex_graph.y = torch.tensor(mads < self.mad_classification_cutoff).float()
                 
-            if isinstance(self.rmsd_classification_cutoff, list):
-                complex_graph.y_binned = torch.tensor(np.logical_and(rmsds[sample] < self.rmsd_classification_cutoff + [math.inf],rmsds[sample] >= [0] + self.rmsd_classification_cutoff), dtype=torch.float).unsqueeze(0)
-                complex_graph.y = torch.tensor(rmsds[sample] < self.rmsd_classification_cutoff[0]).unsqueeze(0).float()
+            if isinstance(self.mad_classification_cutoff, list):
+                complex_graph.y_binned = torch.tensor(np.logical_and(mads[sample] < self.mad_classification_cutoff + [math.inf],mads[sample] >= [0] + self.mad_classification_cutoff), dtype=torch.float).unsqueeze(0)
+                complex_graph.y = torch.tensor(mads[sample] < self.mad_classification_cutoff[0]).unsqueeze(0).float()
             
-            complex_graph.rmsd = torch.tensor(rmsds).float()
+            complex_graph.mad = torch.tensor(mads).float()
 
         complex_graph['ligand'].node_t = {'tr': 0 * torch.ones(complex_graph['ligand'].num_nodes)}
         complex_graph['receptor'].node_t = {'tr': 0 * torch.ones(complex_graph['receptor'].num_nodes)}
@@ -194,14 +195,13 @@ class ConfidenceDataset(Dataset):
         tr_schedule = get_t_schedule(inference_steps=self.inference_steps)
         
         print('Running mode: ', self.running_mode)
-        print("Add perturbation: ", self.add_perturbation)
 
         if self.running_mode == "train":
-            water_ratio = 15
-            resample_steps = 1
+            water_ratio = self.water_ratio
+            resample_steps = self.resample_steps
         elif self.running_mode == "test":
-            water_ratio = 15
-            resample_steps = 1
+            water_ratio = self.water_ratio
+            resample_steps = self.resample_steps
         else:
             raise ValueError("Invalid running mode!")
         total_resample_ratio = water_ratio * resample_steps
@@ -210,7 +210,7 @@ class ConfidenceDataset(Dataset):
         print('resampling steps: ', resample_steps)
         print('total resampling ratio: ', total_resample_ratio)
         
-        rmsds, full_ligand_positions, names = [], [], []
+        mads, full_water_positions, names = [], [], []
         for idx, orig_complex_graph in tqdm(enumerate(self.loader)):
             data_list = [copy.deepcopy(orig_complex_graph) for _ in range(self.samples_per_complex)]
             res_num = int(orig_complex_graph[0]['receptor'].pos.shape[0])
@@ -234,32 +234,32 @@ class ConfidenceDataset(Dataset):
                 
              
             orig_complex_graph['ligand'].orig_pos = (orig_complex_graph['ligand'].pos.cpu().numpy() + orig_complex_graph.original_center.cpu().numpy())
-            orig_ligand_pos = np.expand_dims(orig_complex_graph['ligand'].orig_pos - orig_complex_graph.original_center.cpu().numpy(), axis=0)
+            orig_water_pos = np.expand_dims(orig_complex_graph['ligand'].orig_pos - orig_complex_graph.original_center.cpu().numpy(), axis=0)
 
             if isinstance(orig_complex_graph['ligand'].orig_pos, list):
                 orig_complex_graph['ligand'].orig_pos = orig_complex_graph['ligand'].orig_pos[0]
                 
             real_water_pos = find_real_water_pos(os.path.join(self.args.data_dir, f"{orig_complex_graph.name[0]}/{orig_complex_graph.name[0]}_water.pdb"))
                    
-            ligand_pos_list = []
+            water_pos_list = []
             for complex_graphs in prediction_list:
                 for complex_graph in complex_graphs:
-                    ligand_pos_list.append(complex_graph['ligand'].pos.cpu().numpy())
+                    water_pos_list.append(complex_graph['ligand'].pos.cpu().numpy())
             
-            all_ligand_pos = np.concatenate(ligand_pos_list, axis=0)
-            ligand_pos = np.asarray([all_ligand_pos], dtype=np.float32)
+            all_water_pos = np.concatenate(water_pos_list, axis=0)
+            water_pos = np.asarray([all_water_pos], dtype=np.float32)
             
             
-            positions_new = ligand_pos.squeeze(0) + orig_complex_graph.original_center.cpu().numpy()
-            rmsd, indices = get_nearest_point_distances(positions_new, real_water_pos)
+            positions_new = water_pos.squeeze(0) + orig_complex_graph.original_center.cpu().numpy()
+            mad, indices = get_nearest_point_distances(positions_new, real_water_pos)
             
-            rmsds.append(rmsd)
-            full_ligand_positions.append(ligand_pos)
+            mads.append(mad)
+            full_water_positions.append(water_pos)
     
             names.append(orig_complex_graph.name[0])
             assert(len(orig_complex_graph.name) == 1) # I just put this assert here because of the above line where I assumed that the list is always only lenght 1. Just in case it isn't maybe check what the names in there are.
-        with open(os.path.join(self.full_cache_path, f"ligand_positions{'' if self.cache_creation_id is None else '_id' + str(self.cache_creation_id)}.pkl"), 'wb') as f:
-            pickle.dump((full_ligand_positions, rmsds), f)
+        with open(os.path.join(self.full_cache_path, f"water_positions{'' if self.cache_creation_id is None else '_id' + str(self.cache_creation_id)}.pkl"), 'wb') as f:
+            pickle.dump((full_water_positions, mads), f)
         with open(os.path.join(self.full_cache_path, f"complex_names_in_same_order{'' if self.cache_creation_id is None else '_id' + str(self.cache_creation_id)}.pkl"), 'wb') as f:
             pickle.dump((names), f)
 
