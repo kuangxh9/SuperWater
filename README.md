@@ -210,7 +210,7 @@ python -m inference_water_pos \
 
 **Save Diffusion Process Animation**
 
-To save intermediate steps of the reverse diffusion process as .pdb files, add the following flag:
+To save intermediate steps of the reverse diffusion process as `.pdb` files, add the following flag:
 
 ```
 --save_visualization
