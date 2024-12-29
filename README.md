@@ -183,7 +183,7 @@ python -m confidence.confidence_train \
 
 Run the following command to perform inference:
 
-```bash
+```
 python -m inference_water_pos \
 --original_model_dir workdir/all_atoms_score_model_res15_17092 \
 --confidence_dir workdir/confidence_model_17092_sigmoid_rr15 \
@@ -207,6 +207,18 @@ python -m inference_water_pos \
     - Higher values increase precision but reduce coverage 
     - Acceptable range: [0.02, 0.5]
 - `--save_pos`: Saves sampled water molecule positions as `.pdb` files
+
+**Save Diffusion Process Animation**
+
+To save intermediate steps of the reverse diffusion process as .pdb files, add the following flag:
+
+```
+--save_visualization
+``` 
+
+- Output Directory: `inference_out/diff_process`
+- Visualization: Load the `.pdb` files in PyMOL or similar tools to animate and visualize the diffusion process frame by frame.
+
 
 **Note**:
 - Adjust the `--water_ratio` to 10 or lower when running inference to reduce memory usage.
