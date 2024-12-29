@@ -54,6 +54,7 @@ Download the `waterbind.zip` file, which contains 17,092 protein PDB IDs and the
     `<pdb_id>_water.mol2`
     ```
     @<TRIPOS>MOLECULE  
+    water  
     1 0 0 0 0  
     SMALL  
     GASTEIGER  
@@ -145,7 +146,7 @@ python -m confidence.confidence_train \
 --scale_by_sigma \
 --dropout 0.1 \
 --remove_hs \
---esm_embeddings_path data/test_embeddings_output \
+--esm_embeddings_path data/dataset_waterbind_embeddings_output \
 --cache_creation_id 1 \
 --cache_ids_to_combine 1 \
 --running_mode train \
@@ -225,3 +226,4 @@ inference_out/inferenced_pos_cap<#>/
 The animation below illustrates how randomly distributed water molecules in 3D space align to their predicted positions on the protein surface during the reverse diffusion process.
 
 ![Inference Animation](./images/inference_out/4YL4.gif)
+
