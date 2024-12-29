@@ -18,10 +18,9 @@ from tqdm import tqdm
 
 from datasets.pdbbind import PDBBind
 from utils.diffusion_utils import get_t_schedule
-from utils.sampling import randomize_position, sampling
 from utils.utils import get_model
 from utils.diffusion_utils import t_to_sigma as t_to_sigma_compl
-from utils.sampling import sampling, randomize_position_multiple, larger_original_graph, sampling_test1
+from utils.sampling import sampling, randomize_position_multiple
 from utils.nearest_point_dist import get_nearest_point_distances
 from utils.find_water_pos import find_real_water_pos
 
@@ -65,7 +64,7 @@ class ConfidenceDataset(Dataset):
     def __init__(self, loader, cache_path, original_model_dir, split, device, limit_complexes,
                  inference_steps, samples_per_complex, all_atoms,
                  args, model_ckpt, balance=False, use_original_model_cache=True, mad_classification_cutoff=2,
-                 cache_ids_to_combine=None, cache_creation_id=None, running_mode=None, water_ratio=15, resample_steps=1):
+                 cache_ids_to_combine=None, cache_creation_id=None, running_mode=None, water_ratio=15, resample_steps=1, save_visualization=False):
 
         super(ConfidenceDataset, self).__init__()
         self.loader = loader
@@ -86,6 +85,7 @@ class ConfidenceDataset(Dataset):
         self.running_mode = running_mode
         self.water_ratio = water_ratio
         self.resample_steps = resample_steps
+        self.save_visualization = save_visualization
         
         self.original_model_args, original_model_cache = get_args(original_model_dir), self.loader.dataset.full_cache_path
         
@@ -225,10 +225,11 @@ class ConfidenceDataset(Dataset):
                 sample_data_list = copy.deepcopy(data_list)
                 randomize_position_multiple(sample_data_list, False, self.original_model_args.tr_sigma_max, water_num=step_num_water)
 
-                predictions, confidences = sampling_test1(data_list=sample_data_list, model=model,
+                predictions, confidences = sampling(data_list=sample_data_list, model=model,
                                                     inference_steps=self.inference_steps,
                                                     tr_schedule=tr_schedule,
-                                                    device=self.device, t_to_sigma=t_to_sigma, model_args=self.original_model_args)
+                                                    device=self.device, t_to_sigma=t_to_sigma, model_args=self.original_model_args,
+                                                    save_visualization=self.save_visualization)
                 prediction_list.append(predictions)
                 confidence_list.append(confidences)
                 
@@ -249,8 +250,8 @@ class ConfidenceDataset(Dataset):
             all_water_pos = np.concatenate(water_pos_list, axis=0)
             water_pos = np.asarray([all_water_pos], dtype=np.float32)
             
-            
             positions_new = water_pos.squeeze(0) + orig_complex_graph.original_center.cpu().numpy()
+            
             mad, indices = get_nearest_point_distances(positions_new, real_water_pos)
             
             mads.append(mad)

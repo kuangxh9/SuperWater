@@ -51,11 +51,3 @@ class PDBFile:
             return str_
         with open(path, 'w') as f:
             f.write(str_)
-
-def save_water_to_pdb_file(water_coords, file_name):
-    with open(file_name, "w") as file:
-        for i, coords in enumerate(water_coords, start=1):
-            # Format the line as per PDB format specifications for an ATOM record
-            # This is a simplification; a real PDB file might need more detailed info
-            line = f"HETATM  {i:>5}  O  HOH A{1:>4}    {coords[0]:>8.3f}{coords[1]:>8.3f}{coords[2]:>8.3f}  1.00 20.00          O\n"
-            file.write(line)

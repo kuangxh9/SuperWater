@@ -147,9 +147,9 @@ class PDBBind(Dataset):
             print(f'Skipping {name} because of the error:')
             print(e)
             return [], []
-        
-        ligs = read_mols(self.pdbbind_dir, name, remove_hs=False)
 
+        ligs = read_mols(self.pdbbind_dir, name, remove_hs=False)
+        
         complex_graphs = []
         failed_indices = []
         for i, lig in enumerate(ligs):
@@ -256,6 +256,7 @@ def read_mols(pdbbind_dir, name, remove_hs=False):
     for file in os.listdir(os.path.join(pdbbind_dir, name)):
         if file.endswith(".mol2"):
             lig = read_molecule(os.path.join(pdbbind_dir, name, file[:-5] + ".mol2"), remove_hs=remove_hs, sanitize=True)
+            
             if lig is not None:
                 ligs.append(lig)
     return ligs

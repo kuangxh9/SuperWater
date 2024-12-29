@@ -261,6 +261,7 @@ def parse_inference_args():
     parser.add_argument('--water_ratio', type=int, default=15, help='')
     parser.add_argument('--resample_steps', type=int, default=1, help='')
     parser.add_argument('--use_sigmoid', action='store_true', default=False, help='')
+    parser.add_argument('--save_visualization', action='store_true', default=False, help='')
         
     args = parser.parse_args()
     return args

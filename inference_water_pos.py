@@ -167,7 +167,8 @@ def construct_loader_confidence(args, device):
                    "model_ckpt": args.ckpt,
                    "running_mode": args.running_mode,
                    "water_ratio": args.water_ratio,
-                   "resample_steps": args.resample_steps}
+                   "resample_steps": args.resample_steps,
+                   "save_visualization": args.save_visualization}
     loader_class = DataListLoader if torch.cuda.is_available() else DataLoader
     exception_flag = False
 

@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 from confidence.dataset import ListDataset
 from utils import so3, torus
-from utils.sampling import randomize_position, sampling, randomize_position_new, randomize_position_multiple
+from utils.sampling import sampling, randomize_position_multiple
 import torch
 from utils.diffusion_utils import get_t_schedule
 from utils.min_dist import match_points_and_get_distances
