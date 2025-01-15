@@ -94,6 +94,8 @@ Download the `waterbind.zip` file, which contains 17,092 protein PDB IDs and the
     ```
 
 ### Step 2: Train the Score Model
+Replace `entity` in line 138 with your `wandb` username, and provide your W&B API key when prompted in the terminal after executing the following code.
+
 ```bash
 python -m train \
 --run_name all_atoms_score_model_res15_17092_retrain \
