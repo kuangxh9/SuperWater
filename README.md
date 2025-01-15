@@ -127,6 +127,8 @@ python -m train \
 ```
 
 ### Step 3: Train the Confidence Model
+Replace `entity` in line 287 of `confidence/confidence_train.py` with your `wandb` username, and provide your W&B API key when prompted in the terminal after executing the following code.
+
 ```bash
 python -m confidence.confidence_train \
 --original_model_dir workdir/all_atoms_score_model_res15_17092_retrain \
