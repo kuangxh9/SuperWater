@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from functools import partial
 import wandb
 import torch
+import time
 from sklearn.metrics import roc_auc_score
 from torch_geometric.loader import DataListLoader, DataLoader
 from tqdm import tqdm
@@ -33,6 +34,8 @@ from utils.parsing import parse_inference_args
 
 args = parse_inference_args()
 
+total_sampling_ratio = args.water_ratio * args.resample_steps
+
 if args.config:
     config_dict = yaml.load(args.config, Loader=yaml.FullLoader)
     arg_dict = args.__dict__
@@ -45,7 +48,7 @@ if args.config:
     args.config = args.config.name
 assert (args.main_metric_goal == 'max' or args.main_metric_goal == 'min')
 
-save_pos_path = "inference_out/" + f"inferenced_pos_cap{args.cap}" + "/"
+save_pos_path = "inference_out/" + f"inferenced_pos_rr{total_sampling_ratio}_cap{args.cap}" + "/"
 os.makedirs(save_pos_path, exist_ok=True)
 
 torch.manual_seed(42)
@@ -67,7 +70,14 @@ def convert_txt_to_pdb(txt_file_path: str, output_pdb_path: str):
 
 def test_epoch(model, loader, mad_prediction, filter=True, use_sigmoid=args.use_sigmoid, quiet=False):
     model.eval()
+    log_data = []
+    log_dir = "logs"
+    os.makedirs(log_dir, exist_ok=True)
+    total_ratio = args.water_ratio * args.resample_steps
     for data in tqdm(loader, total=len(loader)):
+
+        start_time = time.time()
+        pdb_name = data[0].name
         try:
             with torch.no_grad():
                 pred = model(data)
@@ -106,6 +116,11 @@ def test_epoch(model, loader, mad_prediction, filter=True, use_sigmoid=args.use_
                         pdb_folder = os.path.join(save_pos_path, pdb_name)
                         os.makedirs(pdb_folder, exist_ok=True)
 
+                        filtered_file_path = os.path.join(pdb_folder, f"{pdb_name}_filtered.txt")
+                        filtered_probabilities_reshaped = probabilities.reshape(-1, 1).cpu().numpy()
+                        combined_pos_prob = np.hstack((positions_adjusted, filtered_probabilities_reshaped))
+                        np.savetxt(filtered_file_path, combined_pos_prob, fmt='%.3f')
+
                         save_txt_path = os.path.join(pdb_folder, f'{pdb_name}_centroid.txt')
                         np.savetxt(save_txt_path, centroids, fmt='%.8f')
                         print(f"Saved centroids for {pdb_name} to {save_txt_path}")
@@ -129,6 +144,13 @@ def test_epoch(model, loader, mad_prediction, filter=True, use_sigmoid=args.use_
                 continue
             else:
                 raise e
+
+        end_time = time.time()
+        processing_time = end_time - start_time
+        log_data.append((pdb_name, f"{processing_time:.2f}"))
+    with open(f"logs/inference_log_rr{total_ratio}.txt", "w") as log_file:
+        for record in log_data:
+            log_file.write(f"{record[0]} {record[1]}\n")
 
 def evalulation(args, model, val_loader, run_dir):
     print("Starting testing...")

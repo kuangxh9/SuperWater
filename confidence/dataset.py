@@ -8,6 +8,7 @@ from functools import partial
 import copy
 from scipy.spatial import cKDTree
 
+import time
 import numpy as np
 import pandas as pd
 import torch
@@ -184,6 +185,10 @@ class ConfidenceDataset(Dataset):
         return complex_graph
 
     def preprocessing(self, original_model_cache):
+        log_data = []
+        log_dir = "logs"
+        os.makedirs(log_dir, exist_ok=True)
+        
         t_to_sigma = partial(t_to_sigma_compl, args=self.original_model_args)
         
         model = get_model(self.original_model_args, self.device, t_to_sigma=t_to_sigma, no_parallel=True)
@@ -212,6 +217,9 @@ class ConfidenceDataset(Dataset):
         
         mads, full_water_positions, names = [], [], []
         for idx, orig_complex_graph in tqdm(enumerate(self.loader)):
+            pdb_name = orig_complex_graph[0]['name']
+            start_time = time.time()
+            
             data_list = [copy.deepcopy(orig_complex_graph) for _ in range(self.samples_per_complex)]
             res_num = int(orig_complex_graph[0]['receptor'].pos.shape[0])
             step_num_water = int(res_num * water_ratio)
@@ -258,10 +266,21 @@ class ConfidenceDataset(Dataset):
             full_water_positions.append(water_pos)
     
             names.append(orig_complex_graph.name[0])
-            assert(len(orig_complex_graph.name) == 1) # I just put this assert here because of the above line where I assumed that the list is always only lenght 1. Just in case it isn't maybe check what the names in there are.
+
+            end_time = time.time()
+            processing_time = end_time - start_time
+            log_data.append((pdb_name, res_num, f"{processing_time:.2f}"))
+            
+            assert(len(orig_complex_graph.name) == 1) 
+            
         with open(os.path.join(self.full_cache_path, f"water_positions{'' if self.cache_creation_id is None else '_id' + str(self.cache_creation_id)}.pkl"), 'wb') as f:
             pickle.dump((full_water_positions, mads), f)
         with open(os.path.join(self.full_cache_path, f"complex_names_in_same_order{'' if self.cache_creation_id is None else '_id' + str(self.cache_creation_id)}.pkl"), 'wb') as f:
             pickle.dump((names), f)
+        
+        with open(f"logs/processing_log_rr{total_resample_ratio}.txt", "w") as log_file:
+            for record in log_data:
+                log_file.write(f"{record[0]} {record[1]} {record[2]}\n")
+
 
 
