@@ -141,12 +141,9 @@ def safe_index(l, e):
     except:
         return len(l) - 1
 
-
-
 def parse_receptor(pdbid, pdbbind_dir):
     rec, rec_lig = parsePDB(pdbid, pdbbind_dir)
     return rec, rec_lig
-
 
 def parsePDB(pdbid, pdbbind_dir):
     rec_path = os.path.join(pdbbind_dir, pdbid, f'{pdbid}_protein_processed.pdb')
@@ -172,6 +169,17 @@ def extract_receptor_structure(rec, rec_lig, lig, lm_embedding_chains=None):
     c_coords = []
     valid_chain_ids = []
     lengths = []
+
+    all_coords_test = []
+    for i, chain in enumerate(rec_lig):
+        chain_lig_coords_test = []
+        for res_idx, residue in enumerate(chain):
+            residue_coord_test = []
+            for atom in residue:
+                residue_coord_test.append(list(atom.get_vector()))
+            chain_lig_coords_test.append(np.array(residue_coord_test))
+        all_coords_test.append(chain_lig_coords_test)
+                    
     for i, chain in enumerate(rec):
         chain_coords = []  # num_residues, num_atoms, 3
         chain_lig_coords = []
@@ -194,8 +202,8 @@ def extract_receptor_structure(rec, rec_lig, lig, lm_embedding_chains=None):
                 if atom.name == 'C':
                     c = list(atom.get_vector())
                 residue_coords.append(list(atom.get_vector()))
-
-            if c_alpha != None and n != None and c != None:
+                
+            if c_alpha is not None and n is not None and c is not None:
                 # only append residue if it is an amino acid and not some weird molecule that is part of the complex
                 chain_c_alpha_coords.append(c_alpha)
                 chain_n_coords.append(n)
@@ -206,6 +214,7 @@ def extract_receptor_structure(rec, rec_lig, lig, lm_embedding_chains=None):
             else:
                 chain_lig_coords.append(np.array(residue_coords))
                 invalid_res_ids.append(residue.get_id())
+                
         for res_id in invalid_res_ids:
             chain.detach_child(res_id)
         if len(chain_coords) > 0:
@@ -259,12 +268,13 @@ def extract_receptor_structure(rec, rec_lig, lig, lm_embedding_chains=None):
         rec.detach_child(invalid_id)
 
     all_coords = [item for sublist in all_coords for item in sublist]
+    all_coords_test = [item for sublist in all_coords_test for item in sublist]
 
     assert len(c_alpha_coords) == len(n_coords)
     assert len(c_alpha_coords) == len(c_coords)
     assert sum(valid_lengths) == len(c_alpha_coords)
 
-    return rec, rec_lig, coords, all_coords, c_alpha_coords, n_coords, c_coords, lm_embeddings
+    return rec, rec_lig, coords, all_coords_test, c_alpha_coords, n_coords, c_coords, lm_embeddings
 
 
 def get_lig_graph(mol, complex_graph):
@@ -417,7 +427,6 @@ def rec_atom_featurizer(rec):
                      safe_index(allowable_features['possible_atom_type_2'], (atom_name + '*')[:2]),
                      safe_index(allowable_features['possible_atom_type_3'], atom_name)]
         atom_feats.append(atom_feat)
-
     return atom_feats
 
 
@@ -436,6 +445,7 @@ def get_fullrec_graph(rec, rec_lig, rec_coords, all_coords, c_alpha_coords, n_co
     n_rel_pos = n_coords - c_alpha_coords
     c_rel_pos = c_coords - c_alpha_coords
     num_residues = len(c_alpha_coords)
+
     if num_residues <= 1:
         raise ValueError(f"rec contains only 1 residue!")
 
@@ -468,7 +478,7 @@ def get_fullrec_graph(rec, rec_lig, rec_coords, all_coords, c_alpha_coords, n_co
         mean_vec_ratio_norm = np.linalg.norm(mean_vec, axis=1) / denominator  # (sigma_num,)
         mean_norm_list.append(mean_vec_ratio_norm)
     assert len(src_list) == len(dst_list)
-        
+  
     node_feat = rec_residue_featurizer(rec)
     mu_r_norm = torch.from_numpy(np.array(mean_norm_list).astype(np.float32))
     side_chain_vecs = torch.from_numpy(
@@ -479,7 +489,7 @@ def get_fullrec_graph(rec, rec_lig, rec_coords, all_coords, c_alpha_coords, n_co
     complex_graph['receptor'].mu_r_norm = mu_r_norm
     complex_graph['receptor'].side_chain_vecs = side_chain_vecs.float()
     complex_graph['receptor', 'rec_contact', 'receptor'].edge_index = torch.from_numpy(np.asarray([src_list, dst_list]))
-    
+
     src_c_alpha_idx = np.concatenate([np.asarray([i]*len(l)) for i, l in enumerate(all_coords)])
     
     atom_feat = torch.from_numpy(np.asarray(rec_atom_featurizer(rec_lig)))
@@ -490,14 +500,14 @@ def get_fullrec_graph(rec, rec_lig, rec_coords, all_coords, c_alpha_coords, n_co
         src_c_alpha_idx = src_c_alpha_idx[not_hs]
         atom_feat = atom_feat[not_hs]
         atom_coords = atom_coords[not_hs]
+    
     atoms_edge_index = radius_graph(atom_coords, atom_cutoff, max_num_neighbors=atom_max_neighbors if atom_max_neighbors else 1000)
     atom_res_edge_index = torch.from_numpy(np.asarray([np.arange(len(atom_feat)), src_c_alpha_idx])).long()
-    
     complex_graph['atom'].x = atom_feat
     complex_graph['atom'].pos = atom_coords
     complex_graph['atom', 'atom_contact', 'atom'].edge_index = atoms_edge_index
     complex_graph['atom', 'atom_rec_contact', 'receptor'].edge_index = atom_res_edge_index
-
+    
     return
 
 def write_mol_with_coords(mol, new_coords, path):
