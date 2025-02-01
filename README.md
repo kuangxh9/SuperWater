@@ -52,13 +52,13 @@ python organize_pdb_dataset.py \
 ### Step 1: Generate ESM Embeddings
 
 1. **Prepare FASTA files**:
-    ```bash
+    ```
     python datasets/esm_embedding_preparation_water.py \
     --data_dir data/<your_dataset>_organized \
     --out_file data/prepared_for_esm_<your_dataset>_organized.fasta
     ```
 2. **Generate embeddings**:
-    ```bash
+    ```
     cd data
 
     python ../esm/scripts/extract.py esm2_t33_650M_UR50D prepared_for_esm_<your_dataset>_organized.fasta \
@@ -70,7 +70,7 @@ python organize_pdb_dataset.py \
 ### Step 2: Train the Score Model
 Replace `entity` in line 138 of `train.py` with your `wandb` username, and provide your W&B API key when prompted in the terminal after executing the following code.
 
-```bash
+```
 python -m train \
 --run_name all_atoms_score_model_res15_17092_retrain \
 --test_sigma_intervals \
@@ -103,7 +103,7 @@ python -m train \
 ### Step 3: Train the Confidence Model
 Replace `entity` in line 287 of `confidence/confidence_train.py` with your `wandb` username, and provide your W&B API key when prompted in the terminal after executing the following code.
 
-```bash
+```
 python -m confidence.confidence_train \
 --original_model_dir workdir/all_atoms_score_model_res15_17092_retrain \
 --data_dir data/<your_dataset>_organized \
@@ -148,7 +148,7 @@ python -m confidence.confidence_train \
     ```
 
 2. **Generate embeddings**:
-    ```bash
+    ```
     cd data
 
     python ../esm/scripts/extract.py esm2_t33_650M_UR50D prepared_for_esm_<your_dataset>_organized.fasta \
