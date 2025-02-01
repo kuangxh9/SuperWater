@@ -32,44 +32,18 @@ Download the `waterbind.zip` file, which contains 17,092 protein PDB IDs and the
    Clone the [ESM GitHub repository](https://github.com/facebookresearch/esm) and save it under `esm/` in the project directory.
 
 ## Dataset Preparation
-1. Create your test dataset structure:
-    ```
-    data/
-    └── test_dataset/
-        └── 5SRF/                               # Create folder for each PDB ID
-            ├── 5SRF_protein_processed.pdb      # Naming pattern: <PDB_ID>_protein_processed.pdb
-            ├── 5SRF_water.mol2                 # Dummy file with random water coordinates
-            └── 5SRF_water.pdb                  # Dummy file with random water coordinates
-    ```
+Please place your dataset folder under `data/`. Your dataset folder should contain only `pdb_id.pdb` files. Then, run the following command to organize your raw data into the required format for the program:
+```
+python organize_pdb_dataset.py \
+--raw_data <your_dataset> \
+--output_dir <your_dataset>_organized
+```
 
-    **Note:** (For Inference Only) Dummy water molecule files are placeholders required for structure preloading. Improvements for handling these files are planned for future updates.
+**Actions Performed by the Script:**
+1. Creates an organized dataset folder under `data/` named `<your_dataset>_organized`.
+2. Generates a test split file in `data/splits/` named `<your_dataset>_organized.txt`, which lists all the test pdb IDs.
+3. Due to the behavior of `extract.py` in ESM embedding, which automatically truncates `pdb_id` to the first four characters, the organized dataset folder and filenames will also be truncated accordingly. However, if multiple `pdb_ids` share the same truncated name, they will not be processed. A list of these duplicate truncated `pdb_ids` will be saved in `logs/duplicate_truncate_pdb_id.txt`.
 
-    `<pdb_id>_water.pdb`
-    ```
-    HETATM    1  O   HOH A   1      0.000   0.000   0.000  1.00 0.00           O  
-    TER       2      HOH A   1                                                    
-    END  
-    ```
-
-    `<pdb_id>_water.mol2`
-    ```
-    @<TRIPOS>MOLECULE  
-    water  
-    1 0 0 0 0  
-    SMALL  
-    GASTEIGER  
-
-    @<TRIPOS>ATOM  
-        1  O         0.0000    0.0000    0.0000  O.3   1    HOH1       0.0000  
-
-    @<TRIPOS>BOND  
-    ```
-
-2. Create a test split file:
-    ```
-    data/splits/test.txt             # List of PDB IDs, one per line
-    ```
-    Refer to `test_res15.txt` for an example.
 
 ## Retraining Process
 <details>
@@ -80,15 +54,15 @@ Download the `waterbind.zip` file, which contains 17,092 protein PDB IDs and the
 1. **Prepare FASTA files**:
     ```bash
     python datasets/esm_embedding_preparation_water.py \
-    --data_dir data/waterbind \
-    --out_file data/prepared_for_esm_dataset_waterbind.fasta
+    --data_dir data/<your_dataset>_organized \
+    --out_file data/prepared_for_esm_<your_dataset>_organized.fasta
     ```
 2. **Generate embeddings**:
     ```bash
     cd data
 
-    python ../esm/scripts/extract.py esm2_t33_650M_UR50D prepared_for_esm_dataset_waterbind.fasta \
-    dataset_waterbind_embeddings_output --repr_layers 33 --include per_tok --truncation_seq_length 4096
+    python ../esm/scripts/extract.py esm2_t33_650M_UR50D prepared_for_esm_<your_dataset>_organized.fasta \
+    <your_dataset>_organized_embeddings_output --repr_layers 33 --include per_tok --truncation_seq_length 4096
     
     cd ..
     ```
@@ -100,8 +74,8 @@ Replace `entity` in line 138 of `train.py` with your `wandb` username, and provi
 python -m train \
 --run_name all_atoms_score_model_res15_17092_retrain \
 --test_sigma_intervals \
---esm_embeddings_path data/dataset_waterbind_embeddings_output \
---data_dir data/waterbind \
+--esm_embeddings_path data/<your_dataset>_organized_embeddings_output \
+--data_dir data/<your_dataset>_organized \
 --split_train data/splits/train_res15.txt \
 --split_val data/splits/val_res15.txt \
 --split_test data/splits/test_res15.txt \
@@ -132,7 +106,7 @@ Replace `entity` in line 287 of `confidence/confidence_train.py` with your `wand
 ```bash
 python -m confidence.confidence_train \
 --original_model_dir workdir/all_atoms_score_model_res15_17092_retrain \
---data_dir data/waterbind \
+--data_dir data/<your_dataset>_organized \
 --all_atoms \
 --run_name confidence_model_retrain \
 --split_train data/splits/train_res15.txt \
@@ -150,7 +124,7 @@ python -m confidence.confidence_train \
 --scale_by_sigma \
 --dropout 0.1 \
 --remove_hs \
---esm_embeddings_path data/dataset_waterbind_embeddings_output \
+--esm_embeddings_path data/<your_dataset>_organized_embeddings_output \
 --cache_creation_id 1 \
 --cache_ids_to_combine 1 \
 --running_mode train \
@@ -169,16 +143,16 @@ python -m confidence.confidence_train \
 1. **Prepare FASTA files**:
     ```bash
     python datasets/esm_embedding_preparation_water.py \
-    --data_dir data/test_dataset \
-    --out_file data/prepared_for_esm_test_dataset.fasta
+    --data_dir data/<your_dataset>_organized \
+    --out_file data/prepared_for_esm_<your_dataset>_organized.fasta
     ```
 
 2. **Generate embeddings**:
     ```bash
     cd data
 
-    python ../esm/scripts/extract.py esm2_t33_650M_UR50D prepared_for_esm_test_dataset.fasta \
-    test_dataset_embeddings_output --repr_layers 33 --include per_tok --truncation_seq_length 4096
+    python ../esm/scripts/extract.py esm2_t33_650M_UR50D prepared_for_esm_<your_dataset>_organized.fasta \
+    <your_dataset>_organized_embeddings_output --repr_layers 33 --include per_tok --truncation_seq_length 4096
 
     cd ..
     ```
@@ -191,13 +165,13 @@ Run the following command to perform inference:
 python -m inference_water_pos \
 --original_model_dir workdir/all_atoms_score_model_res15_17092 \
 --confidence_dir workdir/confidence_model_17092_sigmoid_rr15 \
---data_dir data/test_dataset \
+--data_dir data/<your_dataset>_organized \
 --ckpt best_model.pt \
 --all_atoms \
 --cache_path data/cache_confidence \
---split_test data/splits/test.txt \
+--split_test data/splits/<your_dataset>_organized.txt \
 --inference_steps 20 \
---esm_embeddings_path data/test_dataset_embeddings_output \
+--esm_embeddings_path data/<your_dataset>_organized_embeddings_output \
 --cap 0.1 \
 --running_mode test \
 --mad_prediction \
@@ -225,10 +199,22 @@ To save intermediate steps of the reverse diffusion process as `.pdb` files, add
 
 
 **Note**:
-- Adjust the `--water_ratio` to 10 or lower when running inference to reduce memory usage.
-- When changing the dataset or adjusting parameters for resampling, ensure to either
-    - Change the cache path using `--cache_path`
-    - Delete the existing cache to avoid conflicts
+- Set `--water_ratio` to 10 or lower during inference to optimize memory usage.
+
+  **Performance Considerations**:
+  - Refer to our speed and performance tests to adjust the `water_ratio` value based on your working environment:
+  
+    **Inference Speed Comparison**  
+    <img src="./images/testing/superwater_hydraprot_speed_test.png" width="500"/>
+    
+    **Precision-Coverage Curve (Cutoff = 1 Å)**  
+    <img src="./images/testing/superwater_hydraprot_precision_recall_cutoff_1.png" width="500"/>
+
+- When modifying the dataset or resampling parameters, ensure to:
+  - Specify a new cache path using `--cache_path`, or
+  - Delete the existing cache to prevent conflicts.
+
+
 
 ### Output:
 
