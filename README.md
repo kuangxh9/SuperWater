@@ -141,7 +141,7 @@ python -m confidence.confidence_train \
 ### Step 1: Generate ESM Embeddings
 
 1. **Prepare FASTA files**:
-    ```bash
+    ```
     python datasets/esm_embedding_preparation_water.py \
     --data_dir data/<your_dataset>_organized \
     --out_file data/prepared_for_esm_<your_dataset>_organized.fasta
