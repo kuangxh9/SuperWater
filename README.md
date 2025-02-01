@@ -26,6 +26,7 @@ Download the `waterbind.zip` file, which contains 17,092 protein PDB IDs and the
     ```bash
     conda activate superwater
     ```
+    **Note**: This program has been tested on an Nvidia A6000. If you encounter issues related to `torch-cluster` version compatibility, please install a version that matches your working environment.
 
 2. Set up ESM:
     
