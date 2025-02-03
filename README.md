@@ -32,8 +32,8 @@ Download the `waterbind.zip` file, which contains 17,092 protein PDB IDs and the
     
    Clone the [ESM GitHub repository](https://github.com/facebookresearch/esm) and save it under `esm/` in the project directory.
 
-## Dataset Preparation
-Please place your dataset folder under `data/`. Your dataset folder should contain only `pdb_id.pdb` files. Then, run the following command to organize your raw data into the required format for the program:
+## Inference Dataset Preparation
+Place your dataset folder under `data/`. Your dataset folder should contain only `pdb_id.pdb` files of protein structures. Then, run the following command to organize your raw data into the required format for the program:
 ```
 python organize_pdb_dataset.py \
 --raw_data <your_dataset> \
@@ -50,7 +50,28 @@ python organize_pdb_dataset.py \
 <details>
 <summary><strong>Click to expand retraining details</strong></summary>
 
-### Step 1: Generate ESM Embeddings
+### Step 1: Training Dataset Preparation
+Place your dataset folder under the data/ directory. The dataset should be organized as follows:
+
+```
+data/
+└── dataset/
+    └── 5SRF/                               # Create folder for each PDB ID
+        ├── 5SRF_protein_processed.pdb      # Naming pattern: <PDB_ID>_protein_processed.pdb
+        ├── 5SRF_water.mol2                 # Water molecule file in MOL2 format
+        └── 5SRF_water.pdb                  # Water molecule file in PDB format
+```
+
+Store the dataset split files under `data/splits/`:
+```
+data/
+└── splits/
+    ├── train_res15.txt                     # Training set PDB IDs
+    ├── val_res15.txt                       # Validation set PDB IDs
+    └── test_res15.txt                      # Test set PDB IDs
+```
+
+### Step 2: Generate ESM Embeddings
 
 1. **Prepare FASTA files**:
     ```
@@ -68,7 +89,7 @@ python organize_pdb_dataset.py \
     cd ..
     ```
 
-### Step 2: Train the Score Model
+### Step 3: Train the Score Model
 Replace `entity` in line 138 of `train.py` with your `wandb` username, and provide your W&B API key when prompted in the terminal after executing the following code.
 
 ```
@@ -101,7 +122,7 @@ python -m train \
 --n_epochs 300
 ```
 
-### Step 3: Train the Confidence Model
+### Step 4: Train the Confidence Model
 Replace `entity` in line 287 of `confidence/confidence_train.py` with your `wandb` username, and provide your W&B API key when prompted in the terminal after executing the following code.
 
 ```
