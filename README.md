@@ -32,19 +32,6 @@ Download the `waterbind.zip` file, which contains 17,092 protein PDB IDs and the
     
    Clone the [ESM GitHub repository](https://github.com/facebookresearch/esm) and save it under `esm/` in the project directory.
 
-## Inference Dataset Preparation
-Place your dataset folder under `data/`. Your dataset folder should contain only `pdb_id.pdb` files of protein structures. Then, run the following command to organize your raw data into the required format for the program:
-```
-python organize_pdb_dataset.py \
---raw_data <your_dataset> \
---output_dir <your_dataset>_organized
-```
-
-**Actions Performed by the Script:**
-1. Creates an organized dataset folder under `data/` named `<your_dataset>_organized`.
-2. Generates a test split file in `data/splits/` named `<your_dataset>_organized.txt`, which lists all the test pdb IDs.
-3. Due to the behavior of `extract.py` in ESM embedding, which automatically truncates `pdb_id` to the first four characters, the organized dataset folder and filenames will also be truncated accordingly. However, if multiple `pdb_ids` share the same truncated name, they will not be processed. A list of these duplicate truncated `pdb_ids` will be saved in `logs/duplicate_truncate_pdb_id.txt`.
-
 
 ## Retraining Process
 <details>
@@ -158,7 +145,43 @@ python -m confidence.confidence_train \
 ```
 </details>
 
-## Running Inference
+## Running Inference (WebUI)
+This is a simple web application for predicting water molecule positions.
+
+### Prerequisites
+* Ensure you have activated the **Conda environment**.
+* Navigate to the `webapp/` directory in your terminal.
+
+### Start the Web Application
+Run the following command in your terminal:
+```
+python app.py
+```
+### Note on Inference Settings
+* On the Inference page, the default water ratio is set to 1.
+* Adjust this value based on your working environment.
+* In our paper, we used a water ratio of 15 to achieve the best coverage rate. 
+* The `Cleanup` button will remove any file related to the uploaded files.
+
+## Running Inference (Terminal)
+<details>
+<summary><strong>Click to expand retraining details</strong></summary>
+
+### Inference Dataset Preparation
+Place your dataset folder under `data/`. Your dataset folder should contain only `pdb_id.pdb` files of protein structures. Then, run the following command to organize your raw data into the required format for the program:
+```
+python organize_pdb_dataset.py \
+--raw_data <your_dataset> \
+--output_dir <your_dataset>_organized
+```
+
+**Actions Performed by the Script:**
+1. Creates an organized dataset folder under `data/` named `<your_dataset>_organized`.
+2. Generates a test split file in `data/splits/` named `<your_dataset>_organized.txt`, which lists all the test pdb IDs.
+3. Due to the behavior of `extract.py` in ESM embedding, which automatically truncates `pdb_id` to the first four characters, the organized dataset folder and filenames will also be truncated accordingly. However, if multiple `pdb_ids` share the same truncated name, they will not be processed. A list of these duplicate truncated `pdb_ids` will be saved in `logs/duplicate_truncate_pdb_id.txt`.
+
+
+
 
 ### Step 1: Generate ESM Embeddings
 
@@ -244,6 +267,8 @@ Predicted water molecule positions will be saved as `.pdb` files in:
 ```
 inference_out/inferenced_pos_cap<#>/
 ```
+
+</details>
 
 ## Inference Animation
 
