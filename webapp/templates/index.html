@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en" class="h-100">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SuperWater</title>
+    <!-- Bootstrap core CSS -->
+    <link href="../static/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Custom styles -->
+    <link href="../static/css/index_page.css" rel="stylesheet">
+</head>
+
+<body class="d-flex text-center text-white bg-dark">
+    <div class="d-flex w-100 h-100 p-3 mx-auto flex-column">
+
+        <!-- Header -->
+        <header style="margin-bottom: 15px;">
+            <div class="mx-auto" style="max-width: 62em;">
+                <h3 class="float-md-start mb-0" style="font-weight: 1000;">SuperWater</h3>
+                <nav class="nav nav-masthead justify-content-center float-md-end">
+                    <a class="nav-link active" aria-current="page" href="/">Home</a>
+                    <a class="nav-link" href="/inference">Inference</a>
+                    <!-- <a class="nav-link" href="#">Manubook</a> -->
+                </nav>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="px-3">
+            <div class="description-container">
+                <p class="description-text">
+                    SuperWater is a generative model designed to predict water molecule distributions on protein surfaces
+                    using score-based diffusion models and equivariant neural networks.
+                </p>
+                <p class="description-text">
+                    The model and methodology are described in our 
+                    <a href="https://www.biorxiv.org/content/10.1101/2024.11.18.624208v1" target="_blank">preprint on bioRxiv</a>.
+                </p>
+                <p class="description-text">
+                    The animation (left) shows how the model operates: it applies a reverse SDE to iteratively transform 
+                    randomly distributed water molecules in space towards the protein surface. 
+                    A confidence model then filters out water molecule coordinates with confidence scores below a threshold, and finally, clustering is applied 
+                    to generate the final water molecule predictions (right). <a href="/download-demo/4YL4_inferenced.zip" download>Download Demo Files</a>
+                </p>
+            </div>
+            
+
+            <!-- Two boxes side by side -->
+            <div class="container-box">
+
+                <!-- Left Box: Animation -->
+                <div class="box">
+                    <h3 style="padding-bottom: 5px;">Reverse-Diffusion Animation</h3>
+
+                    <div class="image-frame">
+                        <img id="animation-frame" src="../static/images/diffusion_animation/4yl4_0001.png"
+                            alt="Diffusion Animation" />
+                    </div>
+
+                    <div class="controls">
+                        <input type="range" id="progress-bar" min="1" max="20" value="1" onchange="updateFrame()" />
+                        <button class="btn btn-primary mt-2" id="play-btn" onclick="toggleAnimation()">Play</button>
+                    </div>
+                </div>
+
+                <!-- Right Box: Static Image -->
+                <div class="box">
+                    <h3 style="padding-bottom: 5px;">Final Prediction</h3>
+
+                    <div class="image-frame">
+                        <img id="static-image" src="../static/images/4yl4_static_0001.png" alt="Static Structure" />
+                    </div>
+                </div>
+            </div>
+        </main>
+
+    </div>
+
+    <!-- Animation logic -->
+    <script>
+        let currentFrame = 1;
+        let playing = false;
+        let interval;
+
+        function toggleAnimation() {
+            let btn = document.getElementById("play-btn");
+
+            if (!playing && currentFrame === 1) {
+                playing = true;
+                btn.textContent = "Playing...";
+                interval = setInterval(() => {
+                    if (currentFrame >= 20) {
+                        clearInterval(interval);
+                        playing = false;
+                        btn.textContent = "Replay";
+                    } else {
+                        currentFrame++;
+                        document.getElementById("progress-bar").value = currentFrame;
+                        updateFrame();
+                    }
+                }, 500);
+
+
+            } else if (!playing && currentFrame >= 20) {
+                currentFrame = 1;
+                document.getElementById("progress-bar").value = currentFrame;
+                updateFrame();
+                btn.textContent = "Play";
+            }
+        }
+
+        function updateFrame() {
+            let frameNumber = String(document.getElementById("progress-bar").value).padStart(4, '0');
+            document.getElementById("animation-frame").src =
+                `../static/images/diffusion_animation/4yl4_${frameNumber}.png?nocache=${Date.now()}`;
+        }
+
+    </script>
+
+</body>
+
+</html>

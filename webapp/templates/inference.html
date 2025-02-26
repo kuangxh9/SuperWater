@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en" class="h-100">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SuperWater</title>
+    <!-- Bootstrap core CSS -->
+    <link href="../static/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Custom styles -->
+    <link href="../static/css/index_page.css" rel="stylesheet">
+</head>
+
+<body class="d-flex text-center text-white bg-dark">
+    <div class="d-flex w-100 h-100 p-3 mx-auto flex-column">
+        <!-- Header -->
+        <header class="mb-3">
+            <div class="mx-auto" style="max-width: 62em;">
+                <h3 class="float-md-start mb-0" style="font-weight: 1000;">SuperWater</h3>
+                <nav class="nav nav-masthead justify-content-center float-md-end">
+                    <a class="nav-link" href="/">Home</a>
+                    <a class="nav-link active" aria-current="page" href="/inference">Inference</a>
+                    <!-- <a class="nav-link" href="#">Manubook</a> -->
+                </nav>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-grow-1 container mt-4" style="max-width: 65%;">
+            <div class="row g-5">
+                <!-- Upload & Terminal -->
+                <div class="col-9 d-flex flex-column align-items-start">
+
+                    <!-- file/folder upload -->
+                    <div class="mb-4 w-100 text-start"
+                        style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px;">
+                        <form action="/upload_single" method="post" enctype="multipart/form-data">
+                            <label class="form-label text-white">Upload single PDB</label>
+                            <input type="file" class="form-control" name="single_pdb" />
+                            <button class="btn btn-primary mt-2" type="submit">Submit Single</button>
+                        </form>
+
+                        <form action="/upload_folder" method="post" enctype="multipart/form-data" class="mt-3">
+                            <label class="form-label text-white">Upload folder of PDBs</label>
+                            <input type="file" class="form-control" name="pdb_folder" webkitdirectory directory
+                                multiple />
+                            <button class="btn btn-primary mt-2" type="submit">Submit Folder</button>
+                        </form>
+                    </div>
+
+                    <!-- Terminal Output -->
+                    <div class="mb-4 w-100"
+                        style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px;">
+                        <h4 class="text-white text-start">Terminal Output</h4>
+                        <div style="
+                height: 300px;
+                overflow-y: auto;
+                background-color: rgba(255,255,255,0.7);
+                color: #212529;
+                padding: 8px;
+                border-radius: 4px;
+                text-align: left;">
+                            {% if error %}
+                            <p style="color: red; white-space: pre-wrap;">{{ error }}</p>
+                            {% endif %}
+                            {% if output %}
+                            <p style="white-space: pre-wrap;">{{ output }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div> <!-- end col-9 -->
+
+                <!-- Inference Parameter -->
+                <div class="col-3"
+                    style="background: rgba(255,255,255,0.1); border-radius: 8px; height: 48vh; overflow-y: auto; padding: 15px;">
+                    <h5 class="text-white">Inference Parameters</h5>
+                    <hr class="bg-light" />
+
+                    <!-- Start Inference form -->
+                    <form action="/start_inference" method="POST" class="text-start">
+                        <label class="form-label text-white">Water Ratio</label>
+                        <input type="text" class="form-control mb-3" name="water_ratio" value="1" />
+
+                        <label class="form-label text-white">Filter Threshold</label>
+                        <input type="number" class="form-control mb-3" name="filter_threshold" value="0.05"
+                            step="0.05" />
+
+                        <button class="btn btn-primary w-100" type="submit" style="margin-top: 10px">Start
+                            Inference</button>
+                    </form>
+
+                    <!-- Download Button -->
+                    <button class="btn btn-success w-100 mt-3" {% if not inference_done %}disabled{% endif %}
+                        onclick="location.href='/download_prediction'">
+                        Download Prediction
+                    </button>
+
+                    <!-- Cleanup Button -->
+                    <button class="btn btn-danger w-100 mt-3" onclick="location.href='/cleanup_prediction'">
+                        Cleanup
+                    </button>
+                </div> <!-- end col-3 -->
+            </div> <!-- end row -->
+        </main>
+    </div>
+</body>
+
+</html>
