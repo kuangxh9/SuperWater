@@ -165,7 +165,7 @@ python app.py
 
 ## Running Inference (Terminal)
 <details>
-<summary><strong>Click to expand retraining details</strong></summary>
+<summary><strong>Click to expand inference details</strong></summary>
 
 ### Inference Dataset Preparation
 Place your dataset folder under `data/`. Your dataset folder should contain only `pdb_id.pdb` files of protein structures. Then, run the following command to organize your raw data into the required format for the program:
