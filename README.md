@@ -146,7 +146,7 @@ python -m confidence.confidence_train \
 </details>
 
 ## Running Inference (WebUI)
-Access our online model at [superwater.cloud](superwater.cloud). To obtain admin credentials, please email [Xiaohan](xiaohan.kuang@vanderbilt.edu).
+Access our online model at [superwater.cloud](https://superwater.cloud). To obtain admin credentials, please email Xiaohan.
 
 ### Local Web Application for Predicting Water Molecule Positions
 ### Prerequisites
