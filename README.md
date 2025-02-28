@@ -38,7 +38,7 @@ Download the `waterbind.zip` file, which contains 17,092 protein PDB IDs and the
 <summary><strong>Click to expand retraining details</strong></summary>
 
 ### Step 1: Training Dataset Preparation
-Place your dataset folder under the data/ directory. The dataset should be organized as follows:
+Place your dataset folder under the `data/` directory. The dataset should be organized as follows:
 
 ```
 data/
@@ -146,8 +146,9 @@ python -m confidence.confidence_train \
 </details>
 
 ## Running Inference (WebUI)
-This is a simple web application for predicting water molecule positions.
+Access our online model at [superwater.cloud](superwater.cloud). To obtain admin credentials, please email [Xiaohan](xiaohan.kuang@vanderbilt.edu).
 
+### Local Web Application for Predicting Water Molecule Positions
 ### Prerequisites
 * Ensure you have activated the **Conda environment**.
 * Navigate to the `webapp/` directory in your terminal.
@@ -157,6 +158,9 @@ Run the following command in your terminal:
 ```
 python app.py
 ```
+
+Then, open your browser and go to: `http://localhost:8891/`
+
 ### Note on Inference Settings
 * On the Inference page, the default water ratio is set to 1.
 * Adjust this value based on your working environment.
