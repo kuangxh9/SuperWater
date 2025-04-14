@@ -254,10 +254,13 @@ To save intermediate steps of the reverse diffusion process as `.pdb` files, add
   - Refer to our speed and performance tests to adjust the `water_ratio` value based on your working environment:
   
     **Inference Speed Comparison**  
-    <img src="./images/testing/superwater_hydraprot_speed_test.png" width="500"/>
+    <img src="./images/testing/compare_speed_test.png" width="500"/>
+
+    **Precision-Coverage Curve (Cutoff = 0.5 Å)**  
+    <img src="./images/testing/compare_precision_recall_cutoff_0.5.png" width="500"/>
     
     **Precision-Coverage Curve (Cutoff = 1 Å)**  
-    <img src="./images/testing/superwater_hydraprot_precision_recall_cutoff_1.png" width="500"/>
+    <img src="./images/testing/compare_precision_recall_cutoff_1.png" width="500"/>
 
 - When modifying the dataset or resampling parameters, ensure to:
   - Specify a new cache path using `--cache_path`, or
