@@ -275,18 +275,18 @@ Predicted water molecule position files will be saved in:
 inference_out/inferenced_pos_cap<#>/
 ```
 
-Within each `<pdb_id>`/ folder, three files are generated:
+Within each `<pdb_id>/` folder, three files are generated:
 * `<pdb_id>_filter.txt`
   
-  Contains all raw predicted water positions along with their confidence scores.
+  Contains all raw predicted water positions along with their confidence scores; outputs of the confidence model prior to post-processing (not final results).
 * `<pdb_id>_centroid.txt`
   
-  Text file of the final clustered centroid positions.
+  Final water positions (cluster centroids) in plain text, after post-processing (clustering).
 * `<pdb_id>_centroid.pdb`
   
-  PDB-format file of the final centroid positions, suitable for visualization.
+  Final water positions (cluster centroids) in PDB format for visualization.
   
-The centroid files (`.txt` and `.pdb`) are the final outputs to inspect.
+The _centroid files (`.txt` and `.pdb`) are the final outputs to inspect.
 
 </details>
 
