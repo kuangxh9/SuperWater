@@ -270,10 +270,23 @@ To save intermediate steps of the reverse diffusion process as `.pdb` files, add
 
 ### Output:
 
-Predicted water molecule positions will be saved as `.pdb` files in:
+Predicted water molecule position files will be saved in:
 ```
 inference_out/inferenced_pos_cap<#>/
 ```
+
+Within each `<pdb_id>`/ folder, three files are generated:
+* `<pdb_id>_filter.txt`
+  
+  Contains all raw predicted water positions along with their confidence scores.
+* `<pdb_id>_centroid.txt`
+  
+  Text file of the final clustered centroid positions.
+* `<pdb_id>_centroid.pdb`
+  
+  PDB-format file of the final centroid positions, suitable for visualization.
+  
+The centroid files (`.txt` and `.pdb`) are the final outputs to inspect.
 
 </details>
 
