@@ -102,7 +102,7 @@ def test_epoch(model, loader, mad_prediction, filter=True, use_sigmoid=args.use_
                                             threshold=args.cap, 
                                             cluster_distance=1.52, 
                                             use_weighted_avg=True,
-                                            clash_distance=1.52)  
+                                            clash_distance=2.2)  
                 print('centroids: ', len(centroids))
                 
                 if centroids is None:
