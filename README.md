@@ -10,7 +10,7 @@ For any questions, feel free to open an issue or contact us at: xiaohan.kuang@va
 <img src="./images/model_arch/diffusion_process.png" height="300"/> -->
 
 ### Model Architecture
-<img src="./images/model_arch/superwater_model_arch_updated.png" height="300"/>
+<img src="./images/model_arch/superwater_model_arch_updated.png" height="400"/>
 
 ## Data Availability
 The dataset used in this project can be found at [Zenodo](https://doi.org/10.5281/zenodo.14166655).  
