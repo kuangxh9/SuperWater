@@ -1,6 +1,9 @@
 # SuperWater
 
-SuperWater is a generative model designed to predict water molecule distributions on protein surfaces using score-based diffusion models and equivariant neural networks. The model and methodology are described in our [preprint on bioRxiv](https://www.biorxiv.org/content/10.1101/2024.11.18.624208v1).
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17465949.svg)](https://doi.org/10.5281/zenodo.17465949)
+
+SuperWater is a generative model designed to predict water molecule distributions on protein surfaces using score-based diffusion models and equivariant neural networks. The model and methodology are described in our [preprint on bioRxiv](https://www.biorxiv.org/content/10.1101/2024.11.18.624208v1). 
+
 
 For any questions, feel free to open an issue or contact us at: xiaohan.kuang@vanderbilt.edu, zhaoqian.su@vanderbilt.edu
 
@@ -299,4 +302,11 @@ The _centroid files (`.txt` and `.pdb`) are the final outputs to inspect.
 The animation below illustrates how randomly distributed water molecules in 3D space align to their predicted positions on the protein surface during the reverse diffusion process.
 
 ![Inference Animation](./images/inference_out/4YL4.gif)
+
+
+## Citation
+
+If you use this repository, please cite:
+
+Kuang, X., & Su, Z. (2025). *SuperWater: Predicting Water Molecule Positions on Protein Structures by Generative AI* (v1.0.0). Zenodo. [https://doi.org/10.5281/zenodo.17465949](https://doi.org/10.5281/zenodo.17465949)
 
