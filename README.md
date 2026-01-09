@@ -2,10 +2,12 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17465949.svg)](https://doi.org/10.5281/zenodo.17465949)
 
-SuperWater is a generative model designed to predict water molecule distributions on protein surfaces using score-based diffusion models and equivariant neural networks. The model and methodology are described in our [preprint on bioRxiv](https://www.biorxiv.org/content/10.1101/2024.11.18.624208v1). 
+SuperWater is a generative model designed to predict water molecule distributions on protein surfaces using score-based diffusion models and equivariant neural networks. 
 
 
-For any questions, feel free to open an issue or contact us at: xiaohan.kuang@vanderbilt.edu, zhaoqian.su@vanderbilt.edu
+The model and methodology are described in our paper published in *Communications Chemistry* ([Paper](https://www.nature.com/articles/s42004-025-01789-4)). A preprint version is also available on bioRxiv ([Preprint](https://www.biorxiv.org/content/10.1101/2024.11.18.624208v1)).
+
+For any questions, feel free to open an issue or contact us at: xiaohan.kuang@takeda.com, zhaoqian.su@takeda.com
 
 ## Overview
 
