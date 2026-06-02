@@ -174,7 +174,8 @@ class ConfidenceDataset(Dataset):
             model = self.score_model  # reuse the preloaded score model (batch optimization)
         else:
             model = get_model(self.original_model_args, self.device, t_to_sigma=t_to_sigma, no_parallel=True)
-            state_dict = torch.load(f'{self.original_model_dir}/{self.model_ckpt}', map_location=torch.device('cpu'))
+            state_dict = torch.load(f'{self.original_model_dir}/{self.model_ckpt}',
+                                    map_location=torch.device('cpu'), weights_only=True)
             model.load_state_dict(state_dict, strict=True)
             model = model.to(self.device)
         model.eval()

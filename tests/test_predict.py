@@ -80,7 +80,7 @@ def test_discover_structures_filters_and_dedupes(tmp_path):
 def test_resolve_inputs_folder_schema(tmp_path):
     (tmp_path / "X.pdb").write_text("x")
     (tmp_path / "Y.pdb").write_text("y")
-    structures, per_subdir = predict._resolve_inputs({"structure_dir": str(tmp_path)})
+    structures, per_subdir, ignored = predict._resolve_inputs({"structure_dir": str(tmp_path)})
     assert per_subdir is True
     assert sorted(n for n, _ in structures) == ["X", "Y"]
 
@@ -88,7 +88,7 @@ def test_resolve_inputs_folder_schema(tmp_path):
 def test_resolve_inputs_legacy_single_file(tmp_path):
     pdb = tmp_path / "prot.pdb"
     pdb.write_text("ATOM\n")
-    structures, per_subdir = predict._resolve_inputs({"protein_pdb": str(pdb), "name": "myprot"})
+    structures, per_subdir, _ = predict._resolve_inputs({"protein_pdb": str(pdb), "name": "myprot"})
     assert per_subdir is False                     # legacy writes directly into output_dir
     assert structures == [("myprot", str(pdb))]
 

@@ -11,11 +11,15 @@ positions with the score model, scores them with the confidence model, clusters,
 writes final outputs as PDB (default) or mmCIF. The score, confidence and ESM models
 are loaded once and reused across the whole batch.
 """
+import contextlib
 import glob
+import io
 import os
 import shutil
 import sys
 import time
+import traceback
+import warnings
 from argparse import ArgumentParser
 from functools import partial
 
@@ -33,6 +37,52 @@ from superwater.structure_io import to_input_pdb, write_protein_with_waters, SUP
 
 DEFAULT_SCORE_MODEL = "models/water_score_res15"
 DEFAULT_CONFIDENCE_MODEL = "models/water_confidence_res15_sigmoid"
+
+# Verbosity levels.
+QUIET, NORMAL, VERBOSE, DEBUG = 0, 1, 2, 3
+_VERBOSITY_NAMES = {"quiet": QUIET, "normal": NORMAL, "verbose": VERBOSE, "debug": DEBUG}
+
+# Expected, non-actionable library warnings hidden below DEBUG (targeted, not global).
+# Regexes match the real (quoted) library messages anywhere in the text.
+_NOISY_WARNINGS = (
+    {"message": r".*much slower than.*DistributedDataParallel.*"},   # torch_geometric DataParallel
+    {"message": r".*weights_only=False.*", "category": FutureWarning},  # torch.load on trusted caches
+)
+
+
+def _resolve_verbosity(cli, runtime_cfg):
+    """CLI flags override the YAML runtime.verbosity setting."""
+    if getattr(cli, "debug", False):
+        return DEBUG
+    if getattr(cli, "verbose", False):
+        return VERBOSE
+    if getattr(cli, "quiet", False):
+        return QUIET
+    return _VERBOSITY_NAMES.get(str(runtime_cfg.get("verbosity", "normal")).lower(), NORMAL)
+
+
+@contextlib.contextmanager
+def _suppress_output(active):
+    """Redirect stdout/stderr (lower-level prints + tqdm) to a discarded buffer."""
+    if not active:
+        yield
+        return
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+        yield
+
+
+def _count_waters(out_dir, name):
+    txt = os.path.join(out_dir, f"{name}_centroid.txt")
+    if os.path.exists(txt):
+        with open(txt) as f:
+            return sum(1 for line in f if line.strip())
+    return 0
+
+
+def _short_error(exc):
+    first_line = next((ln for ln in str(exc).splitlines() if ln.strip()), "")
+    return (first_line or type(exc).__name__)[:300]
 
 
 def _fail(msg):
@@ -127,11 +177,12 @@ def _cleanup_run(work_root, graph_cache_path, keep_embeddings, keep_graph_cache)
         shutil.rmtree(graph_cache_path, ignore_errors=True)
 
 
-def predict_one(name, src_path, out_dir, score_dir, conf_dir, device, cfg, get_esm_model, overwrite,
-                score_model=None, confidence_model=None):
+def predict_one(name, src_path, out_dir, score_dir, conf_dir, device, cfg, overwrite,
+                score_model=None, confidence_model=None, esm_model=None, esm_alphabet=None):
     """Predict waters for a single structure, writing outputs into ``out_dir``.
 
-    The input may be .pdb/.cif/.mmcif (CIF is converted to PDB). Returns True on success.
+    The input may be .pdb/.cif/.mmcif (CIF is converted to PDB). Returns True on success;
+    raises on a hard failure (caught by the caller, which reports it concisely).
     """
     pred = cfg.get('prediction', {})
     out_cfg = cfg.get('output', {})
@@ -155,11 +206,7 @@ def predict_one(name, src_path, out_dir, score_dir, conf_dir, device, cfg, get_e
     complex_dir = os.path.join(data_dir, name)
     os.makedirs(complex_dir, exist_ok=True)
     protein_dst = os.path.join(complex_dir, f"{name}_protein_processed.pdb")
-    try:
-        to_input_pdb(src_path, protein_dst)  # copies .pdb, converts .cif/.mmcif
-    except Exception as e:
-        print(f"  Failed to read structure {os.path.basename(src_path)}: {e}")
-        return False
+    to_input_pdb(src_path, protein_dst)  # copies .pdb, converts .cif/.mmcif (may raise)
     for ext in ('mol2', 'pdb'):
         shutil.copy(os.path.join(DUMMY_WATER_DIR, f"_water.{ext}"), os.path.join(complex_dir, f"{name}_water.{ext}"))
     split_path = os.path.join(work_root, f"{name}.txt")
@@ -167,8 +214,9 @@ def predict_one(name, src_path, out_dir, score_dir, conf_dir, device, cfg, get_e
         f.write(name + "\n")
 
     if overwrite or not os.path.exists(os.path.join(emb_dir, f"{name}_chain_0.pt")):
-        model, alphabet = get_esm_model()
-        embed_complex(name, protein_dst, emb_dir, model, alphabet, device)
+        if esm_model is None:
+            raise RuntimeError("ESM model was not loaded but embeddings are required")
+        embed_complex(name, protein_dst, emb_dir, esm_model, esm_alphabet, device)
 
     inf_args = build_inference_args(cfg, data_dir, emb_dir, split_path, score_dir, conf_dir, cache_path)
     os.makedirs(out_dir, exist_ok=True)
@@ -193,32 +241,29 @@ def predict_one(name, src_path, out_dir, score_dir, conf_dir, device, cfg, get_e
 
 
 def _resolve_inputs(inp):
-    """Return (structures, per_structure_subdir) from the config's input section.
+    """Return (structures, per_structure_subdir, ignored) from the config's input section.
 
     Supports the folder schema (input.structure_dir) and, for backward compatibility,
-    the old single-file schema (input.protein_pdb).
+    the old single-file schema (input.protein_pdb). ``ignored`` lists unsupported files.
     """
     structure_dir = inp.get('structure_dir')
     if structure_dir:
         if not os.path.isdir(structure_dir):
             _fail(f"input.structure_dir not found or not a directory: {structure_dir}")
-        structures, skipped = discover_structures(structure_dir)
-        if skipped:
-            print(f"Ignoring {len(skipped)} unsupported file(s): {', '.join(skipped)}")
+        structures, ignored = discover_structures(structure_dir)
         if not structures:
             _fail(f"No supported structures ({', '.join(SUPPORTED_STRUCTURE_EXTS)}) in {structure_dir}")
         override = inp.get('name')
         if override and len(structures) == 1:
             structures = [(override, structures[0][1])]
-        return structures, True  # per-structure subdirs
+        return structures, True, ignored  # per-structure subdirs
 
     protein_pdb = inp.get('protein_pdb')  # legacy single-file schema
     if protein_pdb:
-        print("NOTE: 'input.protein_pdb' is deprecated; prefer 'input.structure_dir'.")
         if not os.path.exists(protein_pdb):
             _fail(f"Input protein file not found: {protein_pdb}")
         name = inp.get('name') or os.path.splitext(os.path.basename(protein_pdb))[0]
-        return [(name, protein_pdb)], False  # write directly into output_dir
+        return [(name, protein_pdb)], False, []  # write directly into output_dir
 
     _fail("config requires 'input.structure_dir' (a folder of .pdb/.cif/.mmcif files)")
 
@@ -226,6 +271,11 @@ def _resolve_inputs(inp):
 def main(argv=None):
     parser = ArgumentParser(description="One-command water prediction from a YAML config.")
     parser.add_argument('--config', required=True, help='Path to a prediction YAML config.')
+    parser.add_argument('--verbose', action='store_true',
+                        help='Show progress details, paths, cache reuse, and lower-level messages.')
+    parser.add_argument('--debug', action='store_true',
+                        help='Show everything, including library warnings and full tracebacks.')
+    parser.add_argument('--quiet', action='store_true', help='Show only the final summary and errors.')
     cli = parser.parse_args(argv)
     cfg = load_config(cli.config)
 
@@ -233,8 +283,13 @@ def main(argv=None):
     models_cfg = cfg.get('models', {})
     out_cfg = cfg.get('output', {})
     runtime = cfg.get('runtime', {})
+    level = _resolve_verbosity(cli, runtime)
 
-    structures, per_structure_subdir = _resolve_inputs(inp)
+    def say(msg="", min_level=NORMAL):
+        if level >= min_level:
+            print(msg)
+
+    structures, per_structure_subdir, ignored = _resolve_inputs(inp)
 
     score_dir = resolve_model_dir(models_cfg.get('score_model_dir', DEFAULT_SCORE_MODEL))
     conf_dir = resolve_model_dir(models_cfg.get('confidence_model_dir', DEFAULT_CONFIDENCE_MODEL))
@@ -254,60 +309,106 @@ def main(argv=None):
               "Run `python scripts/check_gpu.py` to diagnose.")
     device = torch.device('cuda')
 
-    set_seed(int(runtime.get('seed', 42)))
-
     output_base = out_cfg.get('output_dir') or os.path.join('outputs', 'predictions')
     overwrite = bool(out_cfg.get('overwrite', False))
+    include_protein = bool(out_cfg.get('include_protein', False))
 
-    # Decide what to run, skipping already-present outputs when not overwriting.
-    succeeded, failed, skipped, to_process = [], [], [], []
+    # --- header ---
+    say("SuperWater prediction")
+    say(f"Config: {cli.config}")
+    say(f"Input structures: {len(structures)}" + (f" ({len(ignored)} unsupported ignored)" if ignored else ""))
+    say(f"Output directory: {output_base}")
+    say(f"Output format: {output_format}")
+    say(f"Include protein: {'yes' if include_protein else 'no'}")
+    if inp.get('protein_pdb') and not inp.get('structure_dir'):
+        say("(note: input.protein_pdb is deprecated; prefer input.structure_dir)")
+    say()
+
+    capture = level <= NORMAL  # hide lower-level prints / tqdm in quiet and normal modes
+    n_total = len(structures)
+
+    # Plan which structures to (re)run vs skip because output already exists.
+    plan = []
     for name, src_path in structures:
         out_dir = os.path.join(output_base, name) if per_structure_subdir else output_base
-        if os.path.isdir(out_dir) and os.listdir(out_dir) and not overwrite:
-            print(f"{name}: output exists, skipping (set output.overwrite: true)")
-            skipped.append(name)
-        else:
-            to_process.append((name, src_path, out_dir))
+        is_skip = bool(os.path.isdir(out_dir) and os.listdir(out_dir) and not overwrite)
+        plan.append((name, src_path, out_dir, is_skip))
+    to_process = [(n, s, o) for (n, s, o, sk) in plan if not sk]
 
-    # Load the score + confidence models once for the batch (only if there is work to do);
-    # the ESM model is loaded lazily on first embedding need.
-    score_model = confidence_model = None
-    if to_process:
-        print("Loading score and confidence models ...")
-        score_model, confidence_model = _load_models(score_dir, conf_dir, device)
+    succeeded, skipped, failed = [], [], []
 
-    esm = {}
+    with warnings.catch_warnings():
+        if level < DEBUG:
+            for spec in _NOISY_WARNINGS:
+                warnings.filterwarnings("ignore", **spec)
 
-    def get_esm_model():
-        if not esm:
-            print("Loading ESM-2 model (first run downloads ~2.5GB to ~/.cache/torch)...")
-            esm['m'], esm['a'] = load_esm_model(device)
-        return esm['m'], esm['a']
+        score_model = confidence_model = esm_model = esm_alphabet = None
+        if to_process:
+            say("Loading models...")
+            with _suppress_output(capture):
+                set_seed(int(runtime.get('seed', 42)))
+                score_model, confidence_model = _load_models(score_dir, conf_dir, device)
+            need_esm = overwrite or any(
+                not os.path.exists(os.path.join('outputs', 'work', n, 'embeddings', f'{n}_chain_0.pt'))
+                for (n, _, _) in to_process)
+            if need_esm:
+                say("Loading ESM-2 model (first run downloads ~2.5 GB; this can take a few minutes)...")
+                with _suppress_output(capture):
+                    esm_model, esm_alphabet = load_esm_model(device)
 
-    print(f"Predicting waters for {len(to_process)} structure(s) "
-          f"-> {output_base} (format={output_format}, include_protein={bool(out_cfg.get('include_protein', False))})")
-    for idx, (name, src_path, out_dir) in enumerate(to_process, start=1):
-        t0 = time.time()
-        if device.type == 'cuda':
-            torch.cuda.reset_peak_memory_stats()
-        print(f"[{idx}/{len(to_process)}] {name}: predicting ...")
-        try:
-            ok = predict_one(name, src_path, out_dir, score_dir, conf_dir, device, cfg, get_esm_model,
-                             overwrite, score_model=score_model, confidence_model=confidence_model)
-        except Exception as e:
-            print(f"  {name} failed: {e}")
-            ok = False
-        mem = f", peak GPU {torch.cuda.max_memory_allocated() / 1e9:.1f} GB" if device.type == 'cuda' else ""
-        print(f"  {name}: {'done' if ok else 'FAILED'} in {time.time() - t0:.1f}s{mem}")
-        (succeeded if ok else failed).append(name)
+        for idx, (name, src_path, out_dir, is_skip) in enumerate(plan, start=1):
+            prefix = f"[{idx}/{n_total}] " if n_total > 1 else "Predicting "
+            if is_skip:
+                say(f"{prefix}{name}... skipped (output exists)")
+                skipped.append(name)
+                continue
 
-    print("\n=== Prediction summary ===")
-    print(f"  succeeded: {', '.join(succeeded) or '(none)'}")
-    if skipped:
-        print(f"  skipped (already present): {', '.join(skipped)}")
-    if failed:
+            if device.type == 'cuda':
+                torch.cuda.reset_peak_memory_stats()
+            t0 = time.time()
+            if level >= NORMAL:
+                print(f"{prefix}{name}... ", end="" if capture else "\n", flush=True)
+
+            err = None
+            try:
+                with _suppress_output(capture):
+                    predict_one(name, src_path, out_dir, score_dir, conf_dir, device, cfg, overwrite,
+                                score_model=score_model, confidence_model=confidence_model,
+                                esm_model=esm_model, esm_alphabet=esm_alphabet)
+            except Exception as e:  # report concisely; full traceback only in --debug
+                err = e
+
+            dt = time.time() - t0
+            mem = f", peak GPU {torch.cuda.max_memory_allocated() / 1e9:.1f} GB" if device.type == 'cuda' else ""
+
+            if err is None:
+                tail = f"done in {dt:.1f}s, {_count_waters(out_dir, name)} waters{mem}"
+                if level >= NORMAL:
+                    print(tail if capture else f"{prefix}{name}: {tail}")
+                succeeded.append(name)
+            else:
+                failed.append(name)
+                tail = f"FAILED: {_short_error(err)}"
+                if level >= NORMAL:
+                    print(tail if capture else f"{prefix}{name}: {tail}")
+                else:
+                    print(f"{name}: {tail}", file=sys.stderr)
+                if level >= DEBUG:
+                    traceback.print_exception(type(err), err, err.__traceback__)
+
+    # --- summary ---
+    if level >= NORMAL:
+        print()
+    print("Summary:")
+    print(f"  succeeded: {', '.join(succeeded) or 'none'}")
+    if n_total > 1:
+        print(f"  skipped: {', '.join(skipped) or 'none'}")
+        print(f"  failed: {', '.join(failed) or 'none'}")
+    elif failed:
         print(f"  failed: {', '.join(failed)}")
-    print(f"  outputs in: {output_base}")
+    out_loc = os.path.join(output_base, succeeded[0]) if (per_structure_subdir and n_total == 1 and succeeded) \
+        else output_base
+    print(f"  outputs: {out_loc}")
     if failed:
         sys.exit(1)
 

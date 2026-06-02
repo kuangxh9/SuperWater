@@ -44,6 +44,10 @@ waters for every structure in a folder with one command:
 superwater-predict --config examples/configs/predict_5srf.yaml
 ```
 
+Output is concise by default; add `--verbose` for detailed progress and paths, or
+`--debug` for library warnings and full tracebacks (or set `runtime.verbosity:
+quiet|normal|verbose|debug` in the config).
+
 The first run downloads the ESM-2 model (~2.5 GB) to `~/.cache/torch`; embeddings are
 generated in-process. Put one or many `.pdb`/`.cif`/`.mmcif` files in `input.structure_dir`
 to run a batch — CIF/mmCIF inputs are converted automatically and unsupported files are

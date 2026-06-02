@@ -155,7 +155,8 @@ def load_confidence_model(confidence_dir, device):
     model = get_model(confidence_args, device, t_to_sigma=None, confidence_mode=True)
     # The checkpoint was saved from a DataParallel-wrapped module, so its keys lack the
     # 'module.' prefix that get_model() (which re-wraps on CUDA) expects.
-    state_dict = torch.load(f'{confidence_dir}/best_model.pt', map_location='cpu')
+    # weights_only=True: these checkpoints are plain tensor state dicts.
+    state_dict = torch.load(f'{confidence_dir}/best_model.pt', map_location='cpu', weights_only=True)
     model.load_state_dict({'module.' + k: v for k, v in state_dict.items()}, strict=True)
     print('Loaded confidence model with', sum(p.numel() for p in model.parameters()), 'parameters')
     return model
