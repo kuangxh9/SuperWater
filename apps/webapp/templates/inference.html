@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SuperWater — Predict</title>
+    <style>
+        :root {
+            --bg: #f6f7f9;
+            --panel: #ffffff;
+            --border: #d9dde3;
+            --text: #1f2733;
+            --muted: #66707d;
+            --accent: #1f6feb;
+            --accent-dark: #1a5fce;
+            --ok: #1a7f37;
+            --err: #b42318;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; background: var(--bg); color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 14px; line-height: 1.5;
+        }
+        header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 28px; background: var(--panel); border-bottom: 1px solid var(--border);
+        }
+        header .brand { font-weight: 700; font-size: 17px; letter-spacing: .2px; }
+        header nav a { color: var(--muted); text-decoration: none; margin-left: 18px; }
+        header nav a.active, header nav a:hover { color: var(--text); }
+        main { max-width: 1100px; margin: 24px auto; padding: 0 24px;
+               display: grid; grid-template-columns: 360px 1fr; gap: 24px; align-items: start; }
+        .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 18px; }
+        .panel h2 { margin: 0 0 14px; font-size: 15px; }
+        label { display: block; font-weight: 600; margin: 14px 0 5px; }
+        label:first-of-type { margin-top: 0; }
+        .hint { color: var(--muted); font-weight: 400; font-size: 12.5px; margin-top: 4px; }
+        input[type=file], input[type=number], select {
+            width: 100%; padding: 8px 9px; border: 1px solid var(--border);
+            border-radius: 6px; font-size: 14px; background: #fff;
+        }
+        .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .check { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-weight: 600; }
+        .check input { width: auto; }
+        button, .btn {
+            display: inline-block; border: 1px solid var(--border); background: #fff; color: var(--text);
+            padding: 8px 14px; border-radius: 6px; font-size: 14px; cursor: pointer; text-decoration: none;
+        }
+        button:hover, .btn:hover { background: #f0f2f5; }
+        .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; width: 100%; margin-top: 18px; padding: 10px; font-weight: 600; }
+        .btn-primary:hover { background: var(--accent-dark); }
+        .banner { padding: 10px 12px; border-radius: 6px; margin-bottom: 16px; font-size: 13.5px; }
+        .banner.error { background: #fde8e6; color: var(--err); border: 1px solid #f3c0bb; }
+        table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+        th, td { text-align: left; padding: 9px 8px; border-bottom: 1px solid var(--border); }
+        th { font-size: 12px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+        td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        .status { font-weight: 600; font-size: 12.5px; }
+        .status.ok { color: var(--ok); }
+        .status.fail { color: var(--err); }
+        .toolbar { display: flex; gap: 10px; margin-top: 16px; }
+        .empty { color: var(--muted); padding: 18px 0; }
+        details { margin-top: 16px; }
+        details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+        pre.log { background: #0f1620; color: #d7e0ea; padding: 12px; border-radius: 6px;
+                  max-height: 320px; overflow: auto; font-size: 12px; white-space: pre-wrap; margin-top: 10px; }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="brand">SuperWater</div>
+        <nav>
+            <a href="/">Home</a>
+            <a class="active" href="/inference">Predict</a>
+        </nav>
+    </header>
+
+    <main>
+        <!-- Left: inputs + settings -->
+        <form class="panel" action="/run" method="post" enctype="multipart/form-data">
+            <h2>Predict water positions</h2>
+
+            <label for="structures">Structure files</label>
+            <input id="structures" type="file" name="structures" multiple accept=".pdb,.cif,.mmcif"
+                   onchange="document.getElementById('fcount').textContent =
+                             this.files.length ? this.files.length + ' file(s) selected' : '';">
+            <div class="hint">Select one or more <code>.pdb</code>, <code>.cif</code>, or
+                <code>.mmcif</code> files. <span id="fcount"></span></div>
+
+            <div class="row2">
+                <div>
+                    <label for="water_ratio">Water ratio</label>
+                    <input id="water_ratio" type="number" name="water_ratio" min="1" step="1"
+                           value="{{ settings.water_ratio }}">
+                    <div class="hint">Waters sampled per residue.</div>
+                </div>
+                <div>
+                    <label for="inference_steps">Inference steps</label>
+                    <input id="inference_steps" type="number" name="inference_steps" min="1" step="1"
+                           value="{{ settings.inference_steps }}">
+                    <div class="hint">Reverse-diffusion steps.</div>
+                </div>
+            </div>
+
+            <div class="row2">
+                <div>
+                    <label for="confidence_cutoff">Confidence cutoff</label>
+                    <input id="confidence_cutoff" type="number" name="confidence_cutoff" min="0.02" max="0.5"
+                           step="0.01" value="{{ settings.confidence_cutoff }}">
+                    <div class="hint">Higher = stricter (fewer waters).</div>
+                </div>
+                <div>
+                    <label for="output_format">Output format</label>
+                    <select id="output_format" name="output_format">
+                        <option value="pdb" {% if settings.output_format != 'cif' %}selected{% endif %}>PDB</option>
+                        <option value="cif" {% if settings.output_format == 'cif' %}selected{% endif %}>mmCIF</option>
+                    </select>
+                    <div class="hint">Predicted-water structure format.</div>
+                </div>
+            </div>
+
+            <label class="check">
+                <input type="checkbox" name="overwrite" {% if settings.overwrite %}checked{% endif %}>
+                Overwrite existing results
+            </label>
+            <label class="check">
+                <input type="checkbox" name="include_protein" {% if settings.include_protein %}checked{% endif %}>
+                Include protein in output structure
+            </label>
+            <label class="check">
+                <input type="checkbox" name="cleanup_intermediates" {% if settings.cleanup_intermediates %}checked{% endif %}>
+                Clean up intermediate files after run
+            </label>
+
+            <button class="btn-primary" type="submit">Run prediction</button>
+            <div class="hint" style="margin-top:10px;">Runs locally on the GPU. Large batches may take a
+                while; the page returns when all structures are done.</div>
+        </form>
+
+        <!-- Right: results -->
+        <section class="panel">
+            <h2>Results</h2>
+            {% if error %}<div class="banner error">{{ error }}</div>{% endif %}
+
+            {% if results %}
+            <table>
+                <thead>
+                    <tr><th>Structure</th><th>Status</th><th class="num">Waters</th><th></th></tr>
+                </thead>
+                <tbody>
+                    {% for r in results %}
+                    <tr>
+                        <td>{{ r.name }}</td>
+                        <td><span class="status {{ 'ok' if r.ok else 'fail' }}">{{ 'Done' if r.ok else 'Failed' }}</span></td>
+                        <td class="num">{{ r.n_waters if r.ok else '—' }}</td>
+                        <td>{% if r.ok %}<a class="btn" href="/download/{{ r.name }}">Download</a>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div class="toolbar">
+                <a class="btn" href="/download_all">Download all (zip)</a>
+                <a class="btn" href="/cleanup">Clear results</a>
+            </div>
+            {% else %}
+            <div class="empty">No predictions yet. Upload structures and run a prediction.</div>
+            {% endif %}
+
+            {% if log %}
+            <details>
+                <summary>Show run log</summary>
+                <pre class="log">{{ log }}</pre>
+            </details>
+            {% endif %}
+        </section>
+    </main>
+</body>
+
+</html>

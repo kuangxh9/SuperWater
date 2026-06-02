@@ -1,0 +1,18 @@
+# Compiled PyTorch Geometric extension wheels for PyTorch 2.5.x + CUDA 11.8.
+#
+# These packages ship as platform/torch/CUDA-specific wheels with a local version
+# suffix (e.g. torch_cluster-1.6.3+pt25cu118). Plain `pip install torch-cluster==1.6.3`
+# from PyPI cannot find them, so the PyG wheel index MUST be provided via --find-links.
+#
+# Install (after the conda env is created and activated):
+#     pip install -r requirements-pyg-cu118.txt
+#
+# If you use a different PyTorch / CUDA build, change the URL below to match,
+# e.g. torch-2.5.0+cpu, torch-2.4.0+cu121, ...  See https://data.pyg.org/whl/
+
+--find-links https://data.pyg.org/whl/torch-2.5.0+cu118.html
+
+torch-cluster==1.6.3
+torch-scatter==2.1.2
+torch-sparse==0.6.18
+torch-spline-conv==1.2.2

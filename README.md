@@ -2,313 +2,226 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17465949.svg)](https://doi.org/10.5281/zenodo.17465949)
 
-SuperWater is a generative model designed to predict water molecule distributions on protein surfaces using score-based diffusion models and equivariant neural networks. 
+SuperWater predicts water-molecule positions on protein surfaces using a score-based
+diffusion model with equivariant neural networks (e3nn): random water "particles" are
+moved onto hydration sites by reverse diffusion, a confidence model scores them, and a
+clustering step produces the final waters.
+
+Paper: *Communications Chemistry* ([article](https://www.nature.com/articles/s42004-025-01789-4)) ·
+[bioRxiv preprint](https://www.biorxiv.org/content/10.1101/2024.11.18.624208v1) ·
+Contact: xiaohan.kuang@takeda.com, zhaoqian.su@takeda.com
+
+<img src="./docs/images/model_arch/superwater_model_arch_updated.png" height="380"/>
+
+## Installation
+
+Requires an NVIDIA GPU with CUDA 11.8 (CPU is not supported). One-command setup:
+
+```bash
+bash scripts/install.sh
+conda activate superwater
+```
+
+This creates the `superwater` conda env (PyTorch 2.5.1+cu118, e3nn, rdkit, openbabel),
+installs the PyTorch Geometric CUDA wheels, and runs `pip install -e .`. Equivalent manual
+steps:
+
+```bash
+conda env create -f environment.yml
+conda activate superwater
+pip install -r requirements-pyg-cu118.txt
+pip install -e .
+```
+
+Check the GPU with `python scripts/check_gpu.py`.
+
+## Quick start
+
+Pretrained models ship under `models/` and an example input folder is bundled. Predict
+waters for every structure in a folder with one command:
+
+```bash
+superwater-predict --config examples/configs/predict_5srf.yaml
+```
+
+The first run downloads the ESM-2 model (~2.5 GB) to `~/.cache/torch`; embeddings are
+generated in-process. Put one or many `.pdb`/`.cif`/`.mmcif` files in `input.structure_dir`
+to run a batch — CIF/mmCIF inputs are converted automatically and unsupported files are
+skipped. Outputs for each input `<name>` go to `outputs/predictions/<name>/`:
+
+- `<name>_centroid.pdb` (or `.cif`) — final predicted waters. With `include_protein: true`
+  (the example default) it also contains the input protein, with waters added as `HOH` on a
+  separate chain.
+- `<name>_centroid.txt` — final water coordinates (xyz).
+- `<name>_filtered.txt` — all sampled positions + scores, written only when
+  `save_filtered: true` (off by default).
+
+### Config
+
+`examples/configs/predict_5srf.yaml`:
+
+```yaml
+input:
+  structure_dir: examples/data/batch_structures  # folder of .pdb/.cif/.mmcif files
+  name: null              # optional name override (single-file input only)
+
+models:
+  score_model_dir: models/water_score_res15
+  confidence_model_dir: models/water_confidence_res15_sigmoid
+
+output:
+  output_dir: outputs/predictions
+  overwrite: true         # re-run structures whose output already exists
+  format: pdb             # output structure format: pdb or cif
+  include_protein: true   # include the input protein with the predicted waters
+
+runtime:
+  device: cuda            # only cuda is supported (no CPU)
+  seed: 42                # random seed for reproducibility
+  cleanup_intermediates: false  # delete this run's per-structure work files after success
+  keep_embeddings: true   # keep the reusable ESM embeddings when cleaning up
+  keep_graph_cache: true  # keep the reusable PyG graph cache when cleaning up
+
+prediction:
+  water_ratio: 10         # waters sampled per residue (higher = more coverage, more memory)
+  inference_steps: 20     # number of reverse-diffusion steps
+  confidence_cutoff: 0.1  # keep-probability threshold ~[0.02, 0.5] (higher = stricter)
+  batch_size: 1           # structures scored per forward pass
+  save_structure: true    # write <name>_centroid.{pdb,cif}
+  save_filtered: false    # also write <name>_filtered.txt (off by default)
+```
+
+The example default writes **protein + predicted waters** and does **not** write the
+filtered file. With `cleanup_intermediates: true`, per-run work files are removed after a
+successful prediction while the reusable ESM embeddings and graph cache are kept (unless
+`keep_embeddings`/`keep_graph_cache` are set to `false`).
+
+## Web app
+
+```bash
+python apps/webapp/app.py
+```
+
+Open http://localhost:8891/, go to **Predict**, upload one or more `.pdb`/`.cif`/`.mmcif`
+files, set the options (water ratio, inference steps, confidence cutoff, output format,
+overwrite, include protein, cleanup), and run. Results appear per structure with a water
+count and download links — per structure or all as a zip. Predictions run synchronously on
+the GPU, so the page returns once the whole batch finishes.
 
 
-The model and methodology are described in our paper published in *Communications Chemistry* ([Paper](https://www.nature.com/articles/s42004-025-01789-4)). A preprint version is also available on bioRxiv ([Preprint](https://www.biorxiv.org/content/10.1101/2024.11.18.624208v1)).
+## Retraining
 
-For any questions, feel free to open an issue or contact us at: xiaohan.kuang@takeda.com, zhaoqian.su@takeda.com
-
-## Overview
-
-<!-- ### Diffusion Process
-<img src="./images/model_arch/diffusion_process.png" height="300"/> -->
-
-### Model Architecture
-<img src="./images/model_arch/superwater_model_arch_updated.png" height="400"/>
-
-## Dataset
-
-The dataset used in this project can be found at [Zenodo](https://doi.org/10.5281/zenodo.17229778).
-
-- **Version 1**: `waterbind.zip` containing 17,092 protein PDB IDs and their corresponding water molecule files.  
-- **Version 2**: Sampled results from [HydraProt](https://github.com/azamanos/HydraProt) and [GalaxyWaterCNN](https://github.com/seoklab/GalaxyWater-CNN).  
-- **Version 3**: Sampled results generated by **SuperWater**.
-
-## Environment Setup
-1. Create the Conda environment by running:
-    ```bash
-    conda env create -f environment.yml
-    ```
-
-    Activate the environment:
-    ```bash
-    conda activate superwater
-    ```
-    **Note**: This program has been tested on an Nvidia A6000. If you encounter issues related to `torch-cluster` version compatibility, please install a version that matches your working environment.
-
-2. Set up ESM:
-    
-   Clone the [ESM GitHub repository](https://github.com/facebookresearch/esm) and save it under `esm/` in the project directory.
-
-
-## Retraining Process
 <details>
-<summary><strong>Click to expand retraining details</strong></summary>
+<summary><strong>Show the retraining workflow</strong> (data prep, then score- and confidence-model training)</summary>
 
-### Step 1: Training Dataset Preparation
-Place your dataset folder under the `data/` directory. The dataset should be organized as follows:
+Retraining is a research-grade workflow (there is no single wrapper script): generate
+ESM-2 embeddings, train the **score** model, then train the **confidence** model on water
+positions sampled from it. The two stages are `python -m superwater.train` and
+`python -m superwater.confidence.train` — run either with `--help` for the full argument
+list. The commands below reproduce the shipped `water_score_res15` /
+`water_confidence_res15_sigmoid` checkpoints; add `--wandb --wandb_entity <user>` to log to
+Weights & Biases.
 
-```
-data/
-└── dataset/
-    └── 5SRF/                               # Create folder for each PDB ID
-        ├── 5SRF_protein_processed.pdb      # Naming pattern: <PDB_ID>_protein_processed.pdb
-        ├── 5SRF_water.mol2                 # Water molecule file in MOL2 format
-        └── 5SRF_water.pdb                  # Water molecule file in PDB format
-```
+### 1. Prepare data
 
-Store the dataset split files under `data/splits/`:
-```
-data/
-└── splits/
-    ├── train_res15.txt                     # Training set PDB IDs
-    ├── val_res15.txt                       # Validation set PDB IDs
-    └── test_res15.txt                      # Test set PDB IDs
-```
-
-### Step 2: Generate ESM Embeddings
-
-1. **Prepare FASTA files**:
-    ```
-    python datasets/esm_embedding_preparation_water.py \
-    --data_dir data/<your_dataset>_organized \
-    --out_file data/prepared_for_esm_<your_dataset>_organized.fasta
-    ```
-2. **Generate embeddings**:
-    ```
-    cd data
-
-    python ../esm/scripts/extract.py esm2_t33_650M_UR50D prepared_for_esm_<your_dataset>_organized.fasta \
-    <your_dataset>_organized_embeddings_output --repr_layers 33 --include per_tok --truncation_seq_length 4096
-    
-    cd ..
-    ```
-
-### Step 3: Train the Score Model
-Replace `entity` in line 138 of `train.py` with your `wandb` username, and provide your W&B API key when prompted in the terminal after executing the following code.
+Download the dataset from [Zenodo](https://doi.org/10.5281/zenodo.17229778) (`waterbind`,
+17,092 complexes) and place it under `data/<dataset>/`, one folder per complex:
 
 ```
-python -m train \
---run_name all_atoms_score_model_res15_17092_retrain \
---test_sigma_intervals \
---esm_embeddings_path data/<your_dataset>_organized_embeddings_output \
---data_dir data/<your_dataset>_organized \
---split_train data/splits/train_res15.txt \
---split_val data/splits/val_res15.txt \
---split_test data/splits/test_res15.txt \
---log_dir workdir \
---lr 1e-3 --tr_sigma_min 0.1 --tr_sigma_max 30 \
---batch_size 8 \
---ns 24 --nv 6 \
---num_conv_layers 3 \
---dynamic_max_cross \
---scheduler plateau --scale_by_sigma \
---dropout 0.1 --all_atoms \
---c_alpha_max_neighbors 24 --remove_hs \
---receptor_radius 15 \
---num_dataloader_workers 10 \
---num_workers 10 \
---wandb \
---cudnn_benchmark \
---use_ema --distance_embed_dim 64 \
---cross_distance_embed_dim 64 \
---sigma_embed_dim 64 \
---scheduler_patience 30 \
---n_epochs 300
+data/<dataset>/<PDB_ID>/
+├── <PDB_ID>_protein_processed.pdb
+├── <PDB_ID>_water.mol2
+└── <PDB_ID>_water.pdb
 ```
 
-### Step 4: Train the Confidence Model
-Replace `entity` in line 287 of `confidence/confidence_train.py` with your `wandb` username, and provide your W&B API key when prompted in the terminal after executing the following code.
+The paper's train/val/test splits are in `examples/data/splits/` (`train_res15.txt`,
+`val_res15.txt`, `test_res15.txt`) — each is a plain list of PDB IDs; supply your own to
+retrain on a different set.
 
-```
-python -m confidence.confidence_train \
---original_model_dir workdir/all_atoms_score_model_res15_17092_retrain \
---data_dir data/<your_dataset>_organized \
---all_atoms \
---run_name confidence_model_retrain \
---split_train data/splits/train_res15.txt \
---split_val data/splits/val_res15.txt \
---split_test data/splits/test_res15.txt \
---inference_steps 20 \
---batch_size 8 \
---n_epochs 50 \
---wandb \
---lr 1e-3 \
---ns 24 \
---nv 6 \
---num_conv_layers 3 \
---dynamic_max_cross \
---scale_by_sigma \
---dropout 0.1 \
---remove_hs \
---esm_embeddings_path data/<your_dataset>_organized_embeddings_output \
---cache_creation_id 1 \
---cache_ids_to_combine 1 \
---running_mode train \
---mad_prediction
-```
-**Note**: If GPU memory is limited, consider adjusting:
-```
---water_ratio 10
-```
-</details>
+### 2. Generate ESM-2 embeddings
 
-## Running Inference (WebUI)
-Our work has been integrated into [tamarind.bio](https://www.tamarind.bio)
-
-### Local Web Application for Predicting Water Molecule Positions
-### Prerequisites
-* Ensure you have activated the **Conda environment**.
-* Navigate to the `webapp/` directory in your terminal.
-
-### Start the Web Application
-Run the following command in your terminal:
-```
-python app.py
+```bash
+superwater-embed --data_dir data/<dataset> --out_dir data/<dataset>_embeddings
 ```
 
-Then, open your browser and go to: `http://localhost:8891/`
+### 3. Train the score (diffusion) model
 
-### Note on Inference Settings
-* On the Inference page, the default water ratio is set to 1.
-* Adjust this value based on your working environment.
-* In our paper, we used a water ratio of 15 to achieve the best coverage rate. 
-* The `Cleanup` button will remove any file related to the uploaded files.
-
-## Running Inference (Terminal)
-<details>
-<summary><strong>Click to expand inference details</strong></summary>
-
-### Inference Dataset Preparation
-Place your dataset folder under `data/`. Your dataset folder should contain only `pdb_id.pdb` files of protein structures. Then, run the following command to organize your raw data into the required format for the program:
-```
-python organize_pdb_dataset.py \
---raw_data <your_dataset> \
---output_dir <your_dataset>_organized
-```
-
-**Actions Performed by the Script:**
-1. Creates an organized dataset folder under `data/` named `<your_dataset>_organized`.
-2. Generates a test split file in `data/splits/` named `<your_dataset>_organized.txt`, which lists all the test pdb IDs.
-3. Due to the behavior of `extract.py` in ESM embedding, which automatically truncates `pdb_id` to the first four characters, the organized dataset folder and filenames will also be truncated accordingly. However, if multiple `pdb_ids` share the same truncated name, they will not be processed. A list of these duplicate truncated `pdb_ids` will be saved in `logs/duplicate_truncate_pdb_id.txt`.
-
-
-
-
-### Step 1: Generate ESM Embeddings
-
-1. **Prepare FASTA files**:
-    ```
-    python datasets/esm_embedding_preparation_water.py \
-    --data_dir data/<your_dataset>_organized \
-    --out_file data/prepared_for_esm_<your_dataset>_organized.fasta
-    ```
-
-2. **Generate embeddings**:
-    ```
-    cd data
-
-    python ../esm/scripts/extract.py esm2_t33_650M_UR50D prepared_for_esm_<your_dataset>_organized.fasta \
-    <your_dataset>_organized_embeddings_output --repr_layers 33 --include per_tok --truncation_seq_length 4096
-
-    cd ..
-    ```
-
-### Step 2: Run Model Inference
-
-Run the following command to perform inference:
-
-```
-python -m inference_water_pos \
---original_model_dir workdir/all_atoms_score_model_res15_17092 \
---confidence_dir workdir/confidence_model_17092_sigmoid_rr15 \
---data_dir data/<your_dataset>_organized \
---ckpt best_model.pt \
---all_atoms \
---cache_path data/cache_confidence \
---split_test data/splits/<your_dataset>_organized.txt \
---inference_steps 20 \
---esm_embeddings_path data/<your_dataset>_organized_embeddings_output \
---cap 0.1 \
---running_mode test \
---mad_prediction \
---save_pos
+```bash
+python -m superwater.train \
+    --run_name water_score_res15_retrain \
+    --data_dir data/<dataset> \
+    --esm_embeddings_path data/<dataset>_embeddings \
+    --split_train examples/data/splits/train_res15.txt \
+    --split_val   examples/data/splits/val_res15.txt \
+    --split_test  examples/data/splits/test_res15.txt \
+    --log_dir models \
+    --all_atoms --remove_hs --receptor_radius 15 --c_alpha_max_neighbors 24 \
+    --ns 24 --nv 6 --num_conv_layers 3 \
+    --distance_embed_dim 64 --cross_distance_embed_dim 64 --sigma_embed_dim 64 \
+    --tr_sigma_min 0.1 --tr_sigma_max 30 --scale_by_sigma --dynamic_max_cross \
+    --lr 1e-3 --batch_size 8 --n_epochs 300 \
+    --scheduler plateau --scheduler_patience 30 --dropout 0.1 \
+    --use_ema --cudnn_benchmark --test_sigma_intervals \
+    --num_workers 10 --num_dataloader_workers 10
 ```
 
-**Key Parameters**:
-- `--data_dir`: Path to your test dataset folder (e.g., `data/test_dataset`)
-- `--split_test`: Path to the test PDB IDs file (e.g., `data/splits/test.txt`)
-- `--cap`: Probability cutoff for water molecule sampling 
-    - Higher values increase precision but reduce coverage 
-    - Acceptable range: [0.02, 0.5]
-- `--save_pos`: Saves sampled water molecule positions as `.pdb` files
+Checkpoints are written to `models/water_score_res15_retrain/` (`best_model.pt`,
+`best_ema_model.pt`, `last_model.pt`, `model_parameters.yml`). The dataset is preprocessed
+into a graph cache on the first run and reused afterwards.
 
-**Save Diffusion Process Animation**
+### 4. Train the confidence model
 
-To save intermediate steps of the reverse diffusion process as `.pdb` files, add the following flag:
+This samples water positions with the score model from step 3, caches them, and trains a
+classifier on each water's deviation from the true sites. The dataset/architecture flags
+must match the score model.
 
-```
---save_visualization
-``` 
-
-- Output Directory: `inference_out/diff_process`
-- Visualization: Load the `.pdb` files in PyMOL or similar tools to animate and visualize the diffusion process frame by frame.
-
-
-**Note**:
-- Set `--water_ratio` to 10 or lower during inference to optimize memory usage.
-
-  **Performance Considerations**:
-  - Refer to our speed and performance tests to adjust the `water_ratio` value based on your working environment:
-  
-    **Inference Speed Comparison**  
-    <img src="./images/testing/compare_speed_test.png" width="500"/>
-
-    **Precision-Coverage Curve (Cutoff = 0.5 Å)**  
-    <img src="./images/testing/compare_precision_recall_cutoff_0.5.png" width="500"/>
-    
-    **Precision-Coverage Curve (Cutoff = 1 Å)**  
-    <img src="./images/testing/compare_precision_recall_cutoff_1.png" width="500"/>
-
-- When modifying the dataset or resampling parameters, ensure to:
-  - Specify a new cache path using `--cache_path`, or
-  - Delete the existing cache to prevent conflicts.
-
-
-
-### Output:
-
-Predicted water molecule position files will be saved in:
-```
-inference_out/inferenced_pos_cap<#>/
+```bash
+python -m superwater.confidence.train \
+    --original_model_dir models/water_score_res15_retrain \
+    --run_name water_confidence_res15_retrain \
+    --data_dir data/<dataset> \
+    --esm_embeddings_path data/<dataset>_embeddings \
+    --split_train examples/data/splits/train_res15.txt \
+    --split_val   examples/data/splits/val_res15.txt \
+    --split_test  examples/data/splits/test_res15.txt \
+    --log_dir models \
+    --all_atoms --remove_hs \
+    --ns 24 --nv 6 --num_conv_layers 3 --scale_by_sigma --dynamic_max_cross --dropout 0.1 \
+    --inference_steps 20 --water_ratio 15 \
+    --lr 1e-3 --batch_size 8 --n_epochs 50 \
+    --running_mode train --mad_prediction \
+    --cache_creation_id 1 --cache_ids_to_combine 1
 ```
 
-Within each `<pdb_id>/` folder, three files are generated:
-* `<pdb_id>_filter.txt`
-  
-  Contains all raw predicted water positions along with their confidence scores; outputs of the confidence model prior to post-processing (not final results).
-* `<pdb_id>_centroid.txt`
-  
-  Final water positions (cluster centroids) in plain text, after post-processing (clustering).
-* `<pdb_id>_centroid.pdb`
-  
-  Final water positions (cluster centroids) in PDB format for visualization.
-  
-The _centroid files (`.txt` and `.pdb`) are the final outputs to inspect.
+The first run is slow: it samples and caches positions for every training complex (under
+`--cache_path`, default `data/cache_confidence`); later runs reuse that cache. Lower
+`--water_ratio` (e.g. 10) and/or `--batch_size` if you hit GPU-memory limits.
+
+### 5. Predict with the retrained models
+
+Point a prediction config (see [Quick start](#quick-start)) at the new folders:
+
+```yaml
+models:
+  score_model_dir: models/water_score_res15_retrain
+  confidence_model_dir: models/water_confidence_res15_retrain
+```
 
 </details>
 
-## Inference Animation
+## Inference animation
 
-The animation below illustrates how randomly distributed water molecules in 3D space align to their predicted positions on the protein surface during the reverse diffusion process.
-
-![Inference Animation](./images/inference_out/4YL4.gif)
-
+![Inference animation](./docs/images/animation/4YL4.gif)
 
 ## Citation
 
-If you use this repository, please cite:
-
-Kuang, X., & Su, Z. (2025). *SuperWater: Predicting Water Molecule Positions on Protein Structures by Generative AI* (v1.0.0). Zenodo. [https://doi.org/10.5281/zenodo.17465949](https://doi.org/10.5281/zenodo.17465949)
-
+```bibtex
+@software{kuang_2025_superwater,
+  author    = {Kuang, Xiaohan and Su, Zhaoqian},
+  title     = {SuperWater: Predicting Water Molecule Positions on Protein Structures by Generative AI},
+  year      = {2025},
+  version   = {v1.0.0},
+  publisher = {Zenodo},
+  doi       = {10.5281/zenodo.17465949}
+}
+```

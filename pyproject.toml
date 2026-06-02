@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "superwater"
+version = "1.0.0"
+description = "Predicting water molecule positions on protein structures with score-based diffusion models and equivariant neural networks."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Xiaohan Kuang" },
+    { name = "Zhaoqian Su" },
+]
+keywords = ["diffusion model", "water prediction", "protein structure", "equivariant neural network"]
+
+# The heavy / compiled dependencies (PyTorch + CUDA, the PyTorch Geometric CUDA
+# wheels, e3nn, rdkit, openbabel) are installed via conda and the PyG wheel index
+# rather than from PyPI -- see environment.yml, requirements*.txt and
+# scripts/install.sh. They are intentionally NOT listed here so that
+# `pip install -e .` only registers the package and console scripts and does not
+# attempt to re-resolve them from PyPI (where e3nn==0.5.4 and the
+# torch-cluster==1.6.3+pt25cu118 wheels are not available).
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/xiaohan-kuang/SuperWater"
+Paper = "https://www.nature.com/articles/s42004-025-01789-4"
+Dataset = "https://doi.org/10.5281/zenodo.17229778"
+
+[project.scripts]
+superwater-predict = "superwater.predict:main"
+superwater-train = "superwater.train:main_function"
+superwater-infer = "superwater.inference:main"
+superwater-confidence-train = "superwater.confidence.train:main"
+superwater-organize = "superwater.organize_dataset:main"
+superwater-embed = "superwater.embed:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"superwater.datasets" = ["*.txt"]
+"superwater" = ["data/dummy_water/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

@@ -1,0 +1,16 @@
+# Pure-Python dependencies installed from PyPI.
+#
+# This file does NOT contain:
+#   * torch / torchvision / torchaudio / pytorch-cuda  -> installed via conda (environment.yml)
+#   * e3nn                                             -> installed via conda-forge (environment.yml)
+#   * rdkit / openbabel / biopython / numpy / scipy …  -> installed via conda (environment.yml)
+#   * torch-cluster / torch-scatter / torch-sparse /
+#     torch-spline-conv                                -> see requirements-pyg-cu118.txt (PyG wheel index)
+#
+# It is installed automatically by `conda env create -f environment.yml`
+# (referenced from the `pip:` section there) and again, harmlessly, by scripts/install.sh.
+
+torch-geometric==2.6.1
+fair-esm==2.0.0          # provides `import esm` + esm/scripts/extract.py for ESM-2 embeddings
+wandb>=0.16             # optional: only needed when training with --wandb
+flask>=3.0              # only needed for the local web app (webapp/app.py)

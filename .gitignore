@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Runtime outputs (predictions, logs, diffusion-process frames)
+outputs/
+.openbabel_cache/
+# SO(3)/torus precompute caches (written to CWD by older code; harmless if present)
+.so3_*.npy
+.p.npy
+.score.npy
+
+# Runtime / user data dir: downloaded datasets, preprocessed caches, generated
+# ESM embeddings, web-app uploads. Bundled example data lives in examples/ instead.
+/data/
+
+# Note: external/ (vendored ESM repo) is intentionally tracked, not ignored.
+
+# Weights & Biases
+wandb/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
